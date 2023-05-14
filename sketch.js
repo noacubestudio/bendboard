@@ -7,6 +7,7 @@ let waveform = "sawtooth";
 let baseFreq = 55;
 
 let edo = 12;
+let startStep = 9;
 //let stepCents = (edo) => 1200/edo;
 
 const xStep = 2;
@@ -120,7 +121,7 @@ function drawEdoKeyboard() {
     for (let y = 0; y < rowCount; y++) {
 
       const gridXYedoStep = (x + edoStepStartX) * xStep + (y + edoStepStartY) * yStep;
-      const edoStepInOctave = gridXYedoStep % edo;
+      const edoStepInOctave = (gridXYedoStep+startStep) % edo;
 
       // Create a linear gradient that goes from top to bottom
       let gradient = drawingContext.createLinearGradient(0, y * -keyHeight, 0, (y+1) * -keyHeight);
