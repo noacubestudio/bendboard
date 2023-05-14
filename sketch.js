@@ -2,7 +2,7 @@ let cnv;
 const container = document.getElementById("canvas-container");
 
 // sound settings
-let lpFilter;
+let lpFilter; let reverb;
 let waveform = "sawtooth";
 let baseFreq = 55;
 
@@ -37,6 +37,16 @@ window.setup = () => {
   lpFilter.res(1);
   lpFilter.freq(220);
 
+  // reverb = new p5.Reverb();
+  // reverb.disconnect();
+  // reverb.process(lpFilter, 1.5, 2);
+  // reverb.connect(lpFilter);
+
+  const delay = new p5.Delay();
+  delay.process(lpFilter, 0.18, .6, 2300);
+  delay.setType(1);
+  delay.drywet(0.7);
+
   noLoop();
   textFont('monospace');
   rectMode(CORNERS);
@@ -55,8 +65,12 @@ window.setup = () => {
     synth.freq(baseFreq)
     synth.amp(0.5);
 
+
+
     channels.push({synth: synth, source: source, sourceProperties: sourceProperties});
   }
+
+
 }
 
 window.windowResized = () => {
