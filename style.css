@@ -1,0 +1,30 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #050510;
+  font-family: monospace;
+  font-size: 14px;
+}
+body {
+  position:absolute;
+}
+canvas {
+  display: block;
+}
+#top-container {
+  position: absolute;
+  display: flex;
+  top: 0px;
+}
+#top-container * {
+  flex-basis: main-size;
+  flex-shrink: 0;
+  position: relative;
+}
+#bottom-container {
+  position: absolute;
+  top: 0px;
+}
+#bottom-container * {
+  position: relative;
+}
