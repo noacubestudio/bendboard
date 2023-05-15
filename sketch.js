@@ -99,7 +99,7 @@ window.draw = () => {
 
   updatePlayed();
 
-  background("black");
+  background("gray");
   textSize(18);
   textAlign(CENTER, CENTER)
   fill("white");
@@ -121,10 +121,21 @@ function drawEdoKeyboard() {
     for (let y = 0; y < rowCount; y++) {
 
       const gridXYedoStep = (x + edoStepStartX) * xStep + (y + edoStepStartY) * yStep;
+      const nextYedoStep = (x + edoStepStartX) * xStep + (y + edoStepStartY + 1) * yStep;
+      const prevYedoStep =(x + edoStepStartX) * xStep + (y + edoStepStartY - 1) * yStep;
+
       const edoStepInOctave = (gridXYedoStep+startStep) % edo;
+      const nextStepInOctave = (nextYedoStep+startStep) % edo;
+      const prevStepInOctave = (prevYedoStep+startStep) % edo;
+
+      let edoStepHue = Math.floor(edoStepInOctave/edo * 360);
+      let nextStepHue = Math.floor(nextStepInOctave/edo * 360);
+      let prevStepHue = Math.floor(prevStepInOctave/edo * 360);
+      let hueColorLight = chroma.oklch(0.8, 0.2, edoStepHue).hex();
+      let hueColorDark = chroma.oklch(0.2, 0.2, edoStepHue).hex();
 
       // Create a linear gradient that goes from top to bottom
-      let gradient = drawingContext.createLinearGradient(0, y * -keyHeight, 0, (y+1) * -keyHeight);
+      let gradient = drawingContext.createLinearGradient(0, (y-0.5) * -keyHeight, 0, (y+1.5) * -keyHeight);
 
       // is this step currently playing?
       let playingStep = false;
@@ -135,41 +146,57 @@ function drawEdoKeyboard() {
       }
       if (playingStep) {
         if ([0, 2, 4, 5, 7, 9, 11].includes(edoStepInOctave)) {
-          gradient.addColorStop(0.0, 'white');
-          gradient.addColorStop(0.25, 'cyan');
-          gradient.addColorStop(0.5, 'white');
-          gradient.addColorStop(0.75, 'cyan');
-          gradient.addColorStop(1.0, 'white');
+          gradient.addColorStop(0.0, chroma.oklch(0.5, 0.2, prevStepHue).hex());
+          gradient.addColorStop(0.3, chroma.oklch(0.5, 0.2, edoStepHue).hex());
+          gradient.addColorStop(0.4, chroma.oklch(0.95, 0.2, edoStepHue).hex());
+          gradient.addColorStop(0.6, chroma.oklch(0.95, 0.2, edoStepHue).hex());
+          gradient.addColorStop(0.7, chroma.oklch(0.5, 0.2, edoStepHue).hex());
+          gradient.addColorStop(1.0, chroma.oklch(0.5, 0.2, nextStepHue).hex());
         } else {
-          gradient.addColorStop(0.0, 'black');
-          gradient.addColorStop(0.25, 'blue');
-          gradient.addColorStop(0.5, 'black');
-          gradient.addColorStop(0.75, 'blue');
-          gradient.addColorStop(1.0, 'black');
+          gradient.addColorStop(0.0, chroma.oklch(0.5, 0.2, prevStepHue).hex());
+          gradient.addColorStop(0.3, chroma.oklch(0.5, 0.2, edoStepHue).hex());
+          gradient.addColorStop(0.4, chroma.oklch(0.1, 0.2, edoStepHue).hex());
+          gradient.addColorStop(0.6, chroma.oklch(0.1, 0.2, edoStepHue).hex());
+          gradient.addColorStop(0.7, chroma.oklch(0.5, 0.2, edoStepHue).hex());
+          gradient.addColorStop(1.0, chroma.oklch(0.5, 0.2, nextStepHue).hex());
         }
-        fill("pink")
+        fill("pink");
         drawingContext.fillStyle = gradient;
       } else {
-        if ([0, 2, 4, 5, 7, 9, 11].includes(edoStepInOctave)) {fill("white")} 
-        else {fill("black")}
+        if ([0, 2, 4, 5, 7, 9, 11].includes(edoStepInOctave)) {
+          gradient.addColorStop(0.0, chroma.oklch(0.5, 0.2, prevStepHue).hex());
+          gradient.addColorStop(0.4, chroma.oklch(0.5, 0.2, edoStepHue).hex());
+          gradient.addColorStop(0.4, chroma.oklch(0.9, 0.2, edoStepHue).hex());
+          gradient.addColorStop(0.6, chroma.oklch(0.9, 0.2, edoStepHue).hex());
+          gradient.addColorStop(0.6, chroma.oklch(0.5, 0.2, edoStepHue).hex());
+          gradient.addColorStop(1.0, chroma.oklch(0.5, 0.2, nextStepHue).hex());
+        } else {
+          gradient.addColorStop(0.0, chroma.oklch(0.5, 0.2, prevStepHue).hex());
+          gradient.addColorStop(0.4, chroma.oklch(0.5, 0.2, edoStepHue).hex());
+          gradient.addColorStop(0.4, chroma.oklch(0.2, 0.2, edoStepHue).hex());
+          gradient.addColorStop(0.6, chroma.oklch(0.2, 0.2, edoStepHue).hex());
+          gradient.addColorStop(0.6, chroma.oklch(0.5, 0.2, edoStepHue).hex());
+          gradient.addColorStop(1.0, chroma.oklch(0.5, 0.2, nextStepHue).hex());
+        }
+        fill("pink");
+        drawingContext.fillStyle = gradient;
       }
       rect(x * keyWidth, y * -keyHeight, (x+1) * keyWidth, (y+1) * -keyHeight);
 
       // text
-      if ([0].includes(edoStepInOctave)) {
-        fill("red")
-      } else if ([2, 4, 5, 7, 9, 11].includes(edoStepInOctave)) {
-        fill("black")
-      } else {
-        fill("white")
-      }
-      const label = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B", "B#"][edoStepInOctave]
+      fill(chroma.oklch(0.6, 0.2, edoStepHue).hex())
+      // if ([0, 2, 4, 5, 7, 9, 11].includes(edoStepInOctave)) {
+        
+      // } else {
+      //   fill("white")
+      // }
+      let label = ["C" + (Math.floor(gridXYedoStep/edo)+2), "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B", "B#"][edoStepInOctave]
       text(label, x * keyWidth + keyWidth*0.5, y * -keyHeight - keyHeight*0.5)
     }
     // draw stroke columns
-    stroke("gray");
-    noFill();
-    rect(x * keyWidth, 0, (x+1) * keyWidth, -height);
+    // stroke("gray");
+    // noFill();
+    // rect(x * keyWidth, 0, (x+1) * keyWidth, -height);
   }
 
   pop();
