@@ -16,7 +16,7 @@ const channels = [];
 
 const layout = {
   // columns
-  nextColumnOffsetCents: cents(24, 27),
+  nextColumnOffsetCents: 200, //cents(24, 27),
   columnsOffsetX: 0,
   columnCount: 22,
   // in column
@@ -26,10 +26,30 @@ const layout = {
 const scale = {
   baseFrequency: 55,
   maxSnapToCents: 50, // wip unused
-  equalDivisions: 24,
+  equalDivisions: 12,
   octaveSizeCents: 1200, // range used for scales and EDO
-  ratioChord: [24, 27, 30, 32, 36, 40, 45, 48],
+  ratioChord: ratioChordMode([24, 27, 30, 32, 36, 40, 45, 48], 0),
   cents: [0, 200, 400, 600, 700, 900, 1100] // temp, gets set by ratioChord
+}
+
+function ratioChordMode(chordArray, modeOffset) {
+  // check that the last digit is double the first
+  if (chordArray[0] !== chordArray[chordArray.length-1]/2) return chordArray;
+
+  modeOffset = modeOffset % (chordArray.length - 1);
+  if (modeOffset <= 0) return chordArray;
+
+  const modeArray = [];
+  chordArray.forEach((num, index) => {
+    if (index <= modeOffset) {
+      // these numbers will be doubled
+      modeArray[index + chordArray.length - modeOffset] = num * 2;
+    } 
+    if (index >= modeOffset) {
+      modeArray[index-modeOffset] = num;
+    }
+  });
+  return modeArray;
 }
 
 
