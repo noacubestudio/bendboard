@@ -43,13 +43,21 @@ function ratioChordMode(chordArray, modeOffset) {
   chordArray.forEach((num, index) => {
     if (index <= modeOffset) {
       // these numbers will be doubled
-      modeArray[index + chordArray.length - modeOffset] = num * 2;
+      modeArray[index + (chordArray.length-1) - modeOffset] = num * 2;
     } 
     if (index >= modeOffset) {
       modeArray[index-modeOffset] = num;
     }
   });
+  print(chordArray, modeArray, modeOffset);
   return modeArray;
+}
+
+function randomizeScale() {
+  scale.equalDivisions = random([12, 14, 19, 24, 31]);
+  const baseRatioChord = random([[24, 27, 30, 32, 36, 40, 45, 48], [4, 5, 6, 7, 8]]);
+  scale.ratioChord = ratioChordMode(baseRatioChord, Math.floor(random(baseRatioChord.length+1)));
+  updateScaleFromRatioChord(scale.ratioChord);
 }
 
 
@@ -58,7 +66,7 @@ window.setup = () => {
   tallBuffer = createGraphics(windowWidth/layout.columnCount, height);
   resizeEverything(isMouse);
 
-  updateScaleFromRatioChord(scale.ratioChord)
+  updateScaleFromRatioChord(scale.ratioChord);
   
   cnv.touchStarted(handleTouchStart);
   cnv.touchMoved(handleTouchMove);
@@ -152,10 +160,21 @@ window.draw = () => {
   updatePlayed();
 
   background("#000");
-  textSize(10);
-  fill("white");
-
+ 
   drawKeyboard();
+
+  // menu and GUI
+  fill("#333");
+  rect(4, 4, 56, 46, 4);
+  fill("white");
+  textAlign(CENTER, CENTER);
+  text("Rand.", 30, 25);
+
+  push();
+  translate(50, 0);
+  textSize(10);
+  textAlign(LEFT, BOTTOM);
+
 
   let scaleText = scale.equalDivisions + " edo, scale chord";
   scale.ratioChord.forEach((num, index) => {
@@ -171,6 +190,8 @@ window.draw = () => {
   text(centsText, 14, 14 * 2);
 
   text("height in cents: " + layout.topCents + ", offset per column: " + layout.nextColumnOffsetCents.toFixed(1), 14, 14 * 3);
+
+  pop();
 }
 
 function drawColumn(buffer) {
@@ -480,6 +501,13 @@ function outsideCanvas(x, y) {
   if (x > width) return true
   if (y < 0) return true
   if (y > height) return true
+
+  if (x < 60 && y < 50) {
+    // menu
+    randomizeScale();
+    draw();
+    return true;
+  }
 }
 
 function countInputs() {
