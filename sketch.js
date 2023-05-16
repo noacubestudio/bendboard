@@ -21,12 +21,12 @@ const layout = {
   columnCount: 22,
   // in column
   bottomCents: 0,
-  topCents: 100 * 12
+  topCents: 100 * 11.5
 }
 const scale = {
   baseFrequency: 55,
   maxSnapToCents: 50,
-  edoStepSizeCents: 100, // for reference
+  edoStepSizeCents: 1200 / 31, // for reference
   octaveSizeCents: 1200, // repeat all snap intervals by adding or subtracting this many cents
   ratioChord: [24,27,30,32,36,40,45,48],
   cents: [0, 200, 400, 600, 700, 900, 1100] // temp
@@ -127,11 +127,16 @@ window.draw = () => {
   updatePlayed();
 
   background("#000");
-  textSize(18);
-  textAlign(CENTER, CENTER);
+  textSize(10);
   fill("white");
 
   drawKeyboard();
+
+  let scaleText = "EDO Step " + scale.edoStepSizeCents.toFixed(1) + " cents, Scale";
+  scale.cents.forEach((cent) => {
+    scaleText += " " + cent.toFixed(1);
+  });
+  text(scaleText + " cents.", 14, 14);
 }
 
 function drawColumn(buffer) {
