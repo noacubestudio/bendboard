@@ -1,33 +1,44 @@
-let cnv;
+let cnv; let tallBuffer;
 const container = document.getElementById("canvas-container");
 
+
 // sound settings
-let lpFilter; let reverb;
+let lpFilter; let delayFilter;
 let waveform = "sawtooth";
-let baseFreq = 55;
-
-let edo = 12;
-let startStep = 9;
-//let stepCents = (edo) => 1200/edo;
-
-const xStep = 2;
-const yStep = 1;
-const edoStepStartX = 0;
-const edoStepStartY = 0;
-
-// keyboard
-const colCount = 22;
-const rowCount = 12;
 
 const channels = [];
 // initialed with 10 channels, 
-// each contains an object with the synth 
-// and source: [off, kbd, touch, mouse, ref]
-// sources that are off will be filled again first before starting a new synth,
-// skipping the first position reserved for the ref pitch
+// each contains:
+// - synth object
+// - source type: off, kbd, touch, mouse, ref. (off = filled again first before starting a new synth)
+// - properties: cents (from basenote)
+
+
+const layout = {
+  // columns
+  nextColumnOffsetCents: 200,
+  columnsOffsetX: 0,
+  columnCount: 22,
+  // in column
+  bottomCents: 0,
+  topCents: 100 * 12
+}
+const scale = {
+  baseFrequency: 55,
+  maxSnapToCents: 50,
+  edoStepSizeCents: 100, // for reference
+  octaveSizeCents: 1200, // repeat all snap intervals by adding or subtracting this many cents
+  ratioChord: [24,27,30,32,36,40,45,48],
+  cents: [0, 200, 400, 600, 700, 900, 1100] // temp
+}
+
 
 window.setup = () => {
-  cnv = createCanvas(windowWidth-20, windowHeight-20).parent(container);
+  cnv = createCanvas(windowWidth, windowHeight).parent(container);
+  tallBuffer = createGraphics(windowWidth/layout.columnCount, height);
+  resizeEverything(isMouse);
+
+  updateScaleFromRatioChord(scale.ratioChord)
   
   cnv.touchStarted(handleTouchStart);
   cnv.touchMoved(handleTouchMove);
@@ -43,163 +54,143 @@ window.setup = () => {
   // reverb.process(lpFilter, 1.5, 2);
   // reverb.connect(lpFilter);
 
-  const delay = new p5.Delay();
-  delay.process(lpFilter, 0.18, .6, 2300);
-  delay.setType(1);
-  delay.drywet(0.7);
+  delayFilter = new p5.Delay();
+  delayFilter.process(lpFilter, 0.18, .6, 2300);
+  delayFilter.setType(1);
+  delayFilter.drywet(0.7);
 
   noLoop();
   textFont('monospace');
   rectMode(CORNERS);
-  strokeWeight(3);
+  tallBuffer.textFont('monospace');
+  tallBuffer.rectMode(CORNERS);
 
   // initialize all channels
   for (let i = 0; i < 10; i++) {
     
     let source = "off";
     let synth = new p5.Oscillator();
-    let sourceProperties = {};
+    let properties = {};
 
     synth.disconnect();
     synth.connect(lpFilter);
     synth.setType(waveform);
-    synth.freq(baseFreq)
+    synth.freq(scale.baseFrequency)
     synth.amp(0.5);
 
-
-
-    channels.push({synth: synth, source: source, sourceProperties: sourceProperties});
+    channels.push({synth: synth, source: source, properties: properties});
   }
-
-
 }
 
 window.windowResized = () => {
-  resizeCanvas(windowWidth-20, windowHeight-20);
+  resizeEverything(isMouse);
 }
 
-let playedSteps = []; // step keyboard via mouse/touch/kbd
+function resizeEverything(isMouse) {
+  if (isMouse) {
+    resizeCanvas(windowWidth-20, windowHeight-20);
+  } else {
+    resizeCanvas(windowWidth, windowHeight);
+  }
+  const totalCents = layout.bottomCents + layout.topCents + layout.nextColumnOffsetCents * (layout.columnCount-1);
+  const totalHeight = map(totalCents, layout.bottomCents, layout.topCents, 0, height);
+  print(totalHeight, totalCents)
+  tallBuffer.resizeCanvas(width / layout.columnCount, totalHeight);
+}
+
+function updateScaleFromRatioChord(ratioChord) {
+  scale.cents = [];
+  for (let i = 1; i < ratioChord.length; i++) {
+    const newCents = cents(ratioChord[0], ratioChord[i])
+    scale.cents.push(newCents);
+  }
+}
+
+let playedCents = []; // via mouse/touch/kbd
 
 function updatePlayed() {
+  playedCents = [];
 
-  playedSteps = [];
-
+  // push sound channels that are on to the array of played steps
   channels.forEach((channel, index)=>{
     if (channel.source !== "off") {
-      const edostep = channel.sourceProperties.edostep;
-      if (edostep !== undefined) {
-        playedSteps.push(edostep);
+      const cent = channel.properties.cents;
+      if (cent !== undefined) {
+        playedCents.push(cent);
       }
     }
   });
-
 }
 
 window.draw = () => {
 
   updatePlayed();
 
-  background("gray");
+  background("#000");
   textSize(18);
-  textAlign(CENTER, CENTER)
+  textAlign(CENTER, CENTER);
   fill("white");
 
-  drawEdoKeyboard();
+  drawKeyboard();
 }
 
-function drawEdoKeyboard() {
-  if (edo <= 1) return;
+function drawColumn(buffer) {
+  buffer.push();
+  // go to bottom
+  buffer.translate(0, buffer.height);
+  buffer.background("#000");
+  buffer.textSize(10);
+  buffer.textAlign(CENTER, CENTER);
+  buffer.fill("white");
 
-  const keyWidth = width / colCount;
-  const keyHeight = height / rowCount;
+  // loop upwards, adding everything until height reached
+  const totalCents = layout.bottomCents + layout.topCents + layout.nextColumnOffsetCents * (layout.columnCount-1);
 
-  push();
-  translate(0, height);
+  buffer.stroke("#333");
 
-  for (let x = 0; x < colCount; x++) {
-    noStroke();
-    for (let y = 0; y < rowCount; y++) {
-
-      const gridXYedoStep = (x + edoStepStartX) * xStep + (y + edoStepStartY) * yStep;
-      const nextYedoStep = (x + edoStepStartX) * xStep + (y + edoStepStartY + 1) * yStep;
-      const prevYedoStep =(x + edoStepStartX) * xStep + (y + edoStepStartY - 1) * yStep;
-
-      const edoStepInOctave = (gridXYedoStep+startStep) % edo;
-      const nextStepInOctave = (nextYedoStep+startStep) % edo;
-      const prevStepInOctave = (prevYedoStep+startStep) % edo;
-
-      let edoStepHue = Math.floor(edoStepInOctave/edo * 360);
-      let nextStepHue = Math.floor(nextStepInOctave/edo * 360);
-      let prevStepHue = Math.floor(prevStepInOctave/edo * 360);
-      let hueColorLight = chroma.oklch(0.8, 0.2, edoStepHue).hex();
-      let hueColorDark = chroma.oklch(0.2, 0.2, edoStepHue).hex();
-
-      // Create a linear gradient that goes from top to bottom
-      let gradient = drawingContext.createLinearGradient(0, (y-0.5) * -keyHeight, 0, (y+1.5) * -keyHeight);
-
-      // is this step currently playing?
-      let playingStep = false;
-      for (let p = 0; p < playedSteps.length; p++) {
-        if (gridXYedoStep === playedSteps[p]) {
-          playingStep = true; break;
-        }
-      }
-      if (playingStep) {
-        if ([0, 2, 4, 5, 7, 9, 11].includes(edoStepInOctave)) {
-          gradient.addColorStop(0.0, chroma.oklch(0.5, 0.2, prevStepHue).hex());
-          gradient.addColorStop(0.3, chroma.oklch(0.5, 0.2, edoStepHue).hex());
-          gradient.addColorStop(0.4, chroma.oklch(0.95, 0.2, edoStepHue).hex());
-          gradient.addColorStop(0.6, chroma.oklch(0.95, 0.2, edoStepHue).hex());
-          gradient.addColorStop(0.7, chroma.oklch(0.5, 0.2, edoStepHue).hex());
-          gradient.addColorStop(1.0, chroma.oklch(0.5, 0.2, nextStepHue).hex());
-        } else {
-          gradient.addColorStop(0.0, chroma.oklch(0.5, 0.2, prevStepHue).hex());
-          gradient.addColorStop(0.3, chroma.oklch(0.5, 0.2, edoStepHue).hex());
-          gradient.addColorStop(0.4, chroma.oklch(0.1, 0.2, edoStepHue).hex());
-          gradient.addColorStop(0.6, chroma.oklch(0.1, 0.2, edoStepHue).hex());
-          gradient.addColorStop(0.7, chroma.oklch(0.5, 0.2, edoStepHue).hex());
-          gradient.addColorStop(1.0, chroma.oklch(0.5, 0.2, nextStepHue).hex());
-        }
-        fill("pink");
-        drawingContext.fillStyle = gradient;
-      } else {
-        if ([0, 2, 4, 5, 7, 9, 11].includes(edoStepInOctave)) {
-          gradient.addColorStop(0.0, chroma.oklch(0.5, 0.2, prevStepHue).hex());
-          gradient.addColorStop(0.4, chroma.oklch(0.5, 0.2, edoStepHue).hex());
-          gradient.addColorStop(0.4, chroma.oklch(0.9, 0.2, edoStepHue).hex());
-          gradient.addColorStop(0.6, chroma.oklch(0.9, 0.2, edoStepHue).hex());
-          gradient.addColorStop(0.6, chroma.oklch(0.5, 0.2, edoStepHue).hex());
-          gradient.addColorStop(1.0, chroma.oklch(0.5, 0.2, nextStepHue).hex());
-        } else {
-          gradient.addColorStop(0.0, chroma.oklch(0.5, 0.2, prevStepHue).hex());
-          gradient.addColorStop(0.4, chroma.oklch(0.5, 0.2, edoStepHue).hex());
-          gradient.addColorStop(0.4, chroma.oklch(0.2, 0.2, edoStepHue).hex());
-          gradient.addColorStop(0.6, chroma.oklch(0.2, 0.2, edoStepHue).hex());
-          gradient.addColorStop(0.6, chroma.oklch(0.5, 0.2, edoStepHue).hex());
-          gradient.addColorStop(1.0, chroma.oklch(0.5, 0.2, nextStepHue).hex());
-        }
-        fill("pink");
-        drawingContext.fillStyle = gradient;
-      }
-      rect(x * keyWidth, y * -keyHeight, (x+1) * keyWidth, (y+1) * -keyHeight);
-
-      // text
-      fill(chroma.oklch(0.6, 0.2, edoStepHue).hex())
-      // if ([0, 2, 4, 5, 7, 9, 11].includes(edoStepInOctave)) {
-        
-      // } else {
-      //   fill("white")
-      // }
-      let label = ["C" + (Math.floor(gridXYedoStep/edo)+2), "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B", "B#"][edoStepInOctave]
-      text(label, x * keyWidth + keyWidth*0.5, y * -keyHeight - keyHeight*0.5)
-    }
-    // draw stroke columns
-    // stroke("gray");
-    // noFill();
-    // rect(x * keyWidth, 0, (x+1) * keyWidth, -height);
+  // add simple grid
+  let gridCents = 0;
+  while (gridCents < totalCents) {
+    gridCents += scale.edoStepSizeCents;
+    const yPos = map(gridCents, 0, totalCents, 0, -buffer.height);
+    buffer.line(4, yPos, buffer.width-4, yPos);
   }
 
-  pop();
+  // scale pitches
+  for (let octCents = 0; octCents < totalCents; octCents += scale.octaveSizeCents) {
+    scale.cents.forEach((cent) => {
+      const combinedCent = octCents + cent;
+      const inOctaveHue = (cent / scale.octaveSizeCents) * 360;
+      buffer.stroke(chroma.oklch(0.6, 0.2, inOctaveHue).hex());
+      const yPos = map(combinedCent, 0, totalCents, 0, -buffer.height);
+      buffer.line(4, yPos, buffer.width-4, yPos);
+    });
+  }
+  
+  // playing
+  playedCents.forEach((playedCent) => {
+    buffer.stroke("white");
+    const yPos = map(playedCent, 0, totalCents, 0, -buffer.height);
+    buffer.line(0, yPos, buffer.width, yPos);
+    buffer.noStroke();
+    buffer.fill("white");
+    buffer.text(playedCent.toFixed(1), 0.5 * buffer.width, yPos - 10);
+  });
+
+  buffer.pop();
+}
+
+function drawKeyboard() {
+  const columnWidth = width / layout.columnCount;
+  const totalCents = layout.bottomCents + layout.topCents + layout.nextColumnOffsetCents * (layout.columnCount-1);
+  const totalHeight = map(totalCents, layout.bottomCents, layout.topCents, 0, height);
+
+  drawColumn(tallBuffer);
+
+  for (let x = 0; x < layout.columnCount; x++) {
+    const y = map(layout.nextColumnOffsetCents*x, layout.bottomCents, layout.topCents, totalHeight-height, totalHeight-height*2);
+    image(tallBuffer, x * columnWidth, 0, columnWidth, height, 0, y, columnWidth, height);
+  }
 }
 
 let mouseDown = false;
@@ -251,11 +242,11 @@ function handleTouchEnd(event) {
     const channel = channels[exactChannel("touch", id)];
     if (channel !== undefined) {
       channel.source = "off";
-      channel.sourceProperties = {};
+      channel.properties = {};
       channel.synth.stop();
       if (countInputs() === 0) {
         channels.forEach((channel, index) => {
-          if (index !== 0) {channel.sourceProperties = {}}
+          if (index !== 0) {channel.properties = {}}
           channel.source = "off";
           channel.synth.stop();
         })
@@ -302,11 +293,11 @@ window.mouseReleased = () => {
   const channel = channels[firstChannel("mouse")];
   if (channel !== undefined) {
     channel.source = "off";
-    channel.sourceProperties = {};
+    channel.properties = {};
     channel.synth.stop();
     if (countInputs() === 0) {
       channels.forEach((channel, index) => {
-        channel.sourceProperties = {}
+        channel.properties = {}
         channel.source = "off";
         channel.synth.stop();
       });
@@ -317,7 +308,10 @@ window.mouseReleased = () => {
 }
 
 function handleMouseOver() {
-  isMouse = true;
+  if (!isMouse) {
+    isMouse = true;
+    resizeEverything(isMouse);
+  }
 }
 
 window.keyPressed = () => {
@@ -348,7 +342,7 @@ window.keyReleased = () => {
   const channel = channels[exactChannel("kbd", position)];
   if (channel !== undefined) {
     channel.source = "off";
-    channel.sourceProperties = {};
+    channel.properties = {};
     channel.synth.stop();
     window.draw();
   }
@@ -357,36 +351,37 @@ window.keyReleased = () => {
 
 function setFromScreenXY(channel, x, y, initType, id) {
 
-  channel.sourceProperties.edostep = undefined;
-  if (edo > 1) {
-    const channelEDOStep = setEdoStepFromScreenXY(x, y);
-    const glide = setGlideFromScreenY(y);
-    channel.sourceProperties.edostep = channelEDOStep;
-    const channelCents = ((channelEDOStep+glide)/edo)*1200;
-    channel.sourceProperties.cents = channelCents;
+  channel.properties.cents = undefined;
+
+  if (scale.cents.length >= 1) {
+    const channelCents = setCentsFromScreenXY(x, y);
+    channel.properties.cents = channelCents;
 
     // set freq
-    channel.synth.freq(frequency(baseFreq, channelCents));
+    channel.synth.freq(frequency(scale.baseFrequency, channelCents));
     if (initType !== undefined) initChannel(channel, initType, id);
   }
 }
 
 function setFromKbd(channel, position) {
-  if (edo > 1) {
-    const channelEDOStep = position - 1;
-    channel.sourceProperties.edostep = channelEDOStep;
-    const channelCents = (channelEDOStep/edo)*1200;
-    channel.sourceProperties.cents = channelCents;
+  channel.properties.kbdstep = position - 1;
+  const channelCents = (channel.properties.kbdstep / scale.edoStepSizeCents)*scale.octaveSizeCents;
+  channel.properties.cents = channelCents;
 
-    // set freq
-    channel.synth.freq(frequency(baseFreq, channelCents));
-  }
+  // set freq
+  channel.synth.freq(frequency(scale.baseFrequency, channelCents));
+}
+
+function setCentsFromScreenXY(x, y) {
+  const gridX = Math.floor((x/width)*layout.columnCount);
+  const cents = layout.nextColumnOffsetCents * (gridX + layout.columnsOffsetX) + map(y, height, 0, layout.bottomCents, layout.topCents);
+  return cents;
 }
 
 function setEdoStepFromScreenXY(x, y) {
   const gridX = (x/width)*colCount;
   const gridY = (1-y/height)*rowCount;
-  const gridXYedoStep = (Math.floor(gridX) + edoStepStartX) * xStep + (Math.floor(gridY) + edoStepStartY) * yStep;
+  const gridXYedoStep = (Math.floor(gridX) + edoStepStartX) * nextColumnCentsOffset + (Math.floor(gridY) + edoStepStartY) * yStep;
 
   return gridXYedoStep;
 }
@@ -403,7 +398,7 @@ function setGlideFromScreenY(y) {
 
 function initChannel(channel, type, id) {
   channel.source = type;
-  if (type === "touch") channel.sourceProperties.id = id;
+  if (type === "touch") channel.properties.id = id;
   channel.synth.start();
 }
 
@@ -419,14 +414,14 @@ function exactChannel(source, id) {
   if (source === "kbd") {
     for (let i = 0; i < channels.length; i++) {
       const channel = channels[i];
-      if (channel.source === source && channel.sourceProperties.edostep === id -1) {
+      if (channel.source === source && channel.properties.kbdsteo === id -1) {
         return i;
       }
     }
   } else if (source === "touch") {
     for (let i = 0; i < channels.length; i++) {
       const channel = channels[i];
-      if (channel.source === source && channel.sourceProperties.id === id) {
+      if (channel.source === source && channel.properties.id === id) {
         return i;
       }
     }
@@ -447,18 +442,16 @@ function countInputs() {
 }
 
 // distance between two frequencies in cents
-export function cents(a, b) {
+function cents(a, b) {
   if (b === a) return 0;
-  //if (b % a === 0) return 1200;
-  return 1200 * Math.log2(b / a); //% 1200;
+  return 1200 * Math.log2(b / a);
 }
 
 // frequency after going certain distance in cents
-export function frequency(base, cents) {
+function frequency(base, cents) {
   return base * Math.pow(2, cents / 1200);
 }
 
 function easeInCirc(x) {
   return 1 - Math.sqrt(1 - Math.pow(x, 2));
-  
-  }
+}
