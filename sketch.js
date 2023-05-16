@@ -16,7 +16,7 @@ const channels = [];
 
 const layout = {
   // columns
-  nextColumnOffsetCents: 200,
+  nextColumnOffsetCents: cents(24, 27),
   columnsOffsetX: 0,
   columnCount: 22,
   // in column
@@ -26,7 +26,7 @@ const layout = {
 const scale = {
   baseFrequency: 55,
   maxSnapToCents: 50, // wip unused
-  equalDivisions: 31,
+  equalDivisions: 24,
   octaveSizeCents: 1200, // range used for scales and EDO
   ratioChord: [24, 27, 30, 32, 36, 40, 45, 48],
   cents: [0, 200, 400, 600, 700, 900, 1100] // temp, gets set by ratioChord
@@ -137,11 +137,20 @@ window.draw = () => {
 
   drawKeyboard();
 
-  let scaleText = "EDO" + scale.equalDivisions + ", SCALE";
-  scale.cents.forEach((cent) => {
-    scaleText += " " + cent.toFixed(1);
+  let scaleText = scale.equalDivisions + " edo, scale chord";
+  scale.ratioChord.forEach((num, index) => {
+    scaleText += (index > 0 ? ":" : " ") + num;
   });
-  text(scaleText + " cents.", 14, 14);
+  text(scaleText, 14, 14);
+
+  let centsText = "scale in cents:";
+  scale.cents.forEach((cent) => {
+    centsText += " " + Math.round(cent);
+  });
+  fill("#FFFFFF70");
+  text(centsText, 14, 14 * 2);
+
+  text("height in cents: " + layout.topCents + ", offset per column: " + layout.nextColumnOffsetCents.toFixed(1), 14, 14 * 3);
 }
 
 function drawColumn(buffer) {
