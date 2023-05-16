@@ -25,11 +25,11 @@ const layout = {
 }
 const scale = {
   baseFrequency: 55,
-  maxSnapToCents: 50,
-  edoStepSizeCents: 1200 / 31, // for reference
-  octaveSizeCents: 1200, // repeat all snap intervals by adding or subtracting this many cents
-  ratioChord: [24,27,30,32,36,40,45,48],
-  cents: [0, 200, 400, 600, 700, 900, 1100] // temp
+  maxSnapToCents: 50, // wip unused
+  equalDivisions: 31,
+  octaveSizeCents: 1200, // range used for scales and EDO
+  ratioChord: [24, 27, 30, 32, 36, 40, 45, 48],
+  cents: [0, 200, 400, 600, 700, 900, 1100] // temp, gets set by ratioChord
 }
 
 
@@ -87,15 +87,20 @@ window.windowResized = () => {
 }
 
 function resizeEverything(isMouse) {
+  let newHeight = windowHeight;
+  let newWidth = windowWidth;
   if (isMouse) {
-    resizeCanvas(windowWidth-20, windowHeight-20);
-  } else {
-    resizeCanvas(windowWidth, windowHeight);
+    newHeight-=10; newWidth-=10;
   }
+
+  resizeCanvas(newWidth, newHeight, false);
+
   const totalCents = layout.bottomCents + layout.topCents + layout.nextColumnOffsetCents * (layout.columnCount-1);
-  const totalHeight = map(totalCents, layout.bottomCents, layout.topCents, 0, height);
-  print(totalHeight, totalCents)
-  tallBuffer.resizeCanvas(width / layout.columnCount, totalHeight);
+  const totalHeight = map(totalCents, layout.bottomCents, layout.topCents, 0, newHeight);
+  print("Resized to: " + newWidth + ", " + newHeight + (isMouse ? " in desktop mode" : "."));
+  tallBuffer.resizeCanvas(newWidth / layout.columnCount, totalHeight, false);
+
+  draw();
 }
 
 function updateScaleFromRatioChord(ratioChord) {
@@ -132,7 +137,7 @@ window.draw = () => {
 
   drawKeyboard();
 
-  let scaleText = "EDO Step " + scale.edoStepSizeCents.toFixed(1) + " cents, Scale";
+  let scaleText = "EDO" + scale.equalDivisions + ", SCALE";
   scale.cents.forEach((cent) => {
     scaleText += " " + cent.toFixed(1);
   });
@@ -156,9 +161,9 @@ function drawColumn(buffer) {
   // add simple grid
   let gridCents = 0;
   while (gridCents < totalCents) {
-    gridCents += scale.edoStepSizeCents;
+    gridCents += scale.octaveSizeCents / scale.equalDivisions;
     const yPos = map(gridCents, 0, totalCents, 0, -buffer.height);
-    buffer.line(4, yPos, buffer.width-4, yPos);
+    buffer.line(buffer.width*0.05, yPos, buffer.width*0.95, yPos);
   }
 
   // scale pitches
@@ -166,22 +171,30 @@ function drawColumn(buffer) {
     scale.cents.forEach((cent) => {
       const combinedCent = octCents + cent;
       const inOctaveHue = (cent / scale.octaveSizeCents) * 360;
+      buffer.strokeWeight(1);
       buffer.stroke(chroma.oklch(0.6, 0.2, inOctaveHue).hex());
       const yPos = map(combinedCent, 0, totalCents, 0, -buffer.height);
-      buffer.line(4, yPos, buffer.width-4, yPos);
+      buffer.line(buffer.width*0.05, yPos, buffer.width*0.95, yPos);
+      buffer.strokeWeight(4);
+      buffer.line(buffer.width*0.3, yPos, buffer.width*0.7, yPos);
     });
   }
-  
+
   // playing
   playedCents.forEach((playedCent) => {
+    buffer.strokeWeight(1);
     buffer.stroke("white");
     const yPos = map(playedCent, 0, totalCents, 0, -buffer.height);
     buffer.line(0, yPos, buffer.width, yPos);
+    buffer.strokeWeight(4);
+    buffer.line(buffer.width*0.05, yPos, buffer.width*0.25, yPos);
+    buffer.line(buffer.width*0.75, yPos, buffer.width*0.95, yPos);
     buffer.noStroke();
     buffer.fill("white");
-    buffer.text(playedCent.toFixed(1), 0.5 * buffer.width, yPos - 10);
+    buffer.text(Math.round(playedCent % scale.octaveSizeCents), 0.5 * buffer.width, yPos - 15);
   });
 
+  buffer.strokeWeight(1);
   buffer.pop();
 }
 
@@ -370,7 +383,7 @@ function setFromScreenXY(channel, x, y, initType, id) {
 
 function setFromKbd(channel, position) {
   channel.properties.kbdstep = position - 1;
-  const channelCents = (channel.properties.kbdstep / scale.edoStepSizeCents)*scale.octaveSizeCents;
+  const channelCents = channel.properties.kbdstep * (scale.octaveSizeCents / scale.equalDivisions);
   channel.properties.cents = channelCents;
 
   // set freq
