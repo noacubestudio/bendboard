@@ -18,10 +18,9 @@ const layout = {
   // columns
   nextColumnOffsetCents: 200, //cents(24, 27),
   columnsOffsetX: 0,
-  columnCount: 22,
+  columnCount: 30,
   // in column
-  bottomCents: 0,
-  topCents: 100 * 11.5
+  centsToPixels: 1.0
 }
 const scale = {
   baseFrequency: 55,
@@ -118,13 +117,13 @@ function resizeEverything(isMouse) {
   let newHeight = windowHeight;
   let newWidth = windowWidth;
   if (isMouse) {
-    newHeight-=10; newWidth-=10;
+    newWidth-=16;
   }
 
   resizeCanvas(newWidth, newHeight, false);
 
-  const totalCents = layout.bottomCents + layout.topCents + layout.nextColumnOffsetCents * (layout.columnCount-1);
-  const totalHeight = map(totalCents, layout.bottomCents, layout.topCents, 0, newHeight);
+  const offsetCents = layout.nextColumnOffsetCents * (layout.columnCount-1);
+  const totalHeight = newHeight + offsetCents * layout.centsToPixels;
   print("Resized to: " + newWidth + ", " + newHeight + (isMouse ? " in desktop mode" : "."));
   tallBuffer.resizeCanvas(newWidth / layout.columnCount, totalHeight, false);
 
@@ -189,9 +188,13 @@ window.draw = () => {
   fill("#FFFFFF70");
   text(centsText, 14, 14 * 2);
 
-  text("height in cents: " + layout.topCents + ", offset per column: " + layout.nextColumnOffsetCents.toFixed(1), 14, 14 * 3);
+  text("height in cents: " + height/layout.centsToPixels + ", offset per column: " + layout.nextColumnOffsetCents.toFixed(1), 14, 14 * 3);
 
   pop();
+
+  // stroke("red");
+  // line(0, 0, width, height);
+  noStroke();
 }
 
 function drawColumn(buffer) {
@@ -201,10 +204,9 @@ function drawColumn(buffer) {
   buffer.background("#000");
   buffer.textSize(10);
   buffer.textAlign(CENTER, CENTER);
-  buffer.fill("white");
 
   // loop upwards, adding everything until height reached
-  const totalCents = layout.bottomCents + layout.topCents + layout.nextColumnOffsetCents * (layout.columnCount-1);
+  const totalCents = height / layout.centsToPixels + layout.nextColumnOffsetCents * (layout.columnCount-1);
 
   buffer.stroke("#333");
 
@@ -250,13 +252,14 @@ function drawColumn(buffer) {
 
 function drawKeyboard() {
   const columnWidth = width / layout.columnCount;
-  const totalCents = layout.bottomCents + layout.topCents + layout.nextColumnOffsetCents * (layout.columnCount-1);
-  const totalHeight = map(totalCents, layout.bottomCents, layout.topCents, 0, height);
+  const offsetCents = layout.nextColumnOffsetCents * (layout.columnCount-1);
 
   drawColumn(tallBuffer);
+  //print("kb", layout.nextColumnOffsetCents * (layout.columnCount-1), offsetCents);
+  //print("height", height, "buffer height", tallBuffer.height, height + offsetCents * layout.centsToPixels);
 
   for (let x = 0; x < layout.columnCount; x++) {
-    const y = map(layout.nextColumnOffsetCents*x, layout.bottomCents, layout.topCents, totalHeight-height, totalHeight-height*2);
+    const y = map(x, 0, layout.columnCount-1, offsetCents * layout.centsToPixels, 0)
     image(tallBuffer, x * columnWidth, 0, columnWidth, height, 0, y, columnWidth, height);
   }
 }
@@ -442,7 +445,8 @@ function setFromKbd(channel, position) {
 
 function setCentsFromScreenXY(x, y) {
   const gridX = Math.floor((x/width)*layout.columnCount);
-  const cents = layout.nextColumnOffsetCents * (gridX + layout.columnsOffsetX) + map(y, height, 0, layout.bottomCents, layout.topCents);
+  const yInCents = (height-y)/layout.centsToPixels;
+  const cents = layout.nextColumnOffsetCents * (gridX + layout.columnsOffsetX) + yInCents;
   return cents;
 }
 
