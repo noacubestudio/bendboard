@@ -29,7 +29,7 @@ const layout = {
 }
 const scale = {
   baseFrequency: 27.50,
-  maxSnapToCents: 50, // wip unused
+  maxSnapToCents: 0,
   equalDivisions: 12,
   octaveSizeCents: 1200, // range used for scales and EDO
   ratioChord: ratioChordMode([24, 27, 30, 32, 36, 40, 45, 48], 0),
@@ -175,14 +175,23 @@ window.draw = () => {
   drawKeyboard();
   //drawKeyboardNew();
 
-  // menu and GUI
+  // button
+  textAlign(CENTER, CENTER);
+
   fill("#333");
   rect(4, 4, 56, 46, 4);
   fill("white");
-  textAlign(CENTER, CENTER);
   text("Rand.", 30, 25);
 
   push();
+  translate(60, 0);
+  fill("#333");
+  rect(4, 4, 56, 46, 4);
+  fill("white");
+  text("Snap", 30, 16);
+  text(scale.maxSnapToCents, 30, 34);
+
+
   translate(50, 0);
   textSize(10);
   textAlign(LEFT, BOTTOM);
@@ -467,7 +476,37 @@ function setFromKbd(channel, position) {
 function setCentsFromScreenXY(x, y) {
   const gridX = Math.floor((x/width)*layout.columnCount);
   const yInCents = (height-y)/layout.centsToPixels;
-  const cents = layout.nextColumnOffsetCents * (gridX + layout.columnsOffsetX) + yInCents;
+  let cents = layout.nextColumnOffsetCents * (gridX + layout.columnsOffsetX) + yInCents;
+
+  // find closest cents
+  if (scale.maxSnapToCents > 0) {
+    const playedInOctaveCents = cents % scale.octaveSizeCents;
+    const scaleOctaveCents = [...scale.cents, scale.octaveSizeCents];
+
+    let lastPitch = null;
+    let snapToCentsInOctave = null;
+    for (let i = 0; i < scaleOctaveCents.length; i++) {
+      const currentPitch = scaleOctaveCents[i]
+      if (i > 0 && playedInOctaveCents > lastPitch && playedInOctaveCents < currentPitch) {
+        // find which one is closer and break
+        if (abs(playedInOctaveCents - lastPitch) < abs(playedInOctaveCents - currentPitch)) {
+          snapToCentsInOctave = lastPitch;
+        } else {
+          snapToCentsInOctave = currentPitch;
+        }
+        break;
+      }
+      lastPitch = currentPitch;
+    }
+    //if (snapToCentsInOctave === scale.octaveSizeCents) snapToCentsInOctave = 0;
+
+    let snapDistance = Math.round(playedInOctaveCents - snapToCentsInOctave);
+    if (Math.abs(snapDistance) < scale.maxSnapToCents && snapDistance !== 0) {
+      cents -= snapDistance;
+      //print(snapDistance);
+    }
+  }
+
   return cents;
 }
 
@@ -533,6 +572,17 @@ function outsideCanvas(x, y) {
     draw();
     return true;
   }
+  if (x < 120 && y < 50) {
+    // menu
+    changeSnapping();
+    draw();
+    return true;
+  }
+}
+
+function changeSnapping() {
+  scale.maxSnapToCents += 10;
+  scale.maxSnapToCents = scale.maxSnapToCents % 50;
 }
 
 function countInputs() {
