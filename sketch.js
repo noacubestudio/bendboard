@@ -1,6 +1,11 @@
 let cnv; let tallBuffer;
 const container = document.getElementById("canvas-container");
 
+let mouseDown = false;
+let isMouse = false;
+let totalKbd = 0;
+let totalTouches = 0;
+
 
 // sound settings
 let lpFilter; let delayFilter;
@@ -16,14 +21,14 @@ const channels = [];
 
 const layout = {
   // columns
-  nextColumnOffsetCents: 200, //cents(24, 27),
-  columnsOffsetX: 0,
-  columnCount: 30,
+  nextColumnOffsetCents: 200,
+  columnsOffsetX: 0, //WIP, BROKEN
+  columnCount: 12, // set in resizeEverything
   // in column
-  centsToPixels: 1.0
+  centsToPixels: 0.75
 }
 const scale = {
-  baseFrequency: 55,
+  baseFrequency: 27.50,
   maxSnapToCents: 50, // wip unused
   equalDivisions: 12,
   octaveSizeCents: 1200, // range used for scales and EDO
@@ -62,7 +67,7 @@ function randomizeScale() {
 
 window.setup = () => {
   cnv = createCanvas(windowWidth, windowHeight).parent(container);
-  tallBuffer = createGraphics(windowWidth/layout.columnCount, height);
+  tallBuffer = createGraphics(windowWidth/layout.columnCount, windowHeight);
   resizeEverything(isMouse);
 
   updateScaleFromRatioChord(scale.ratioChord);
@@ -111,6 +116,7 @@ window.setup = () => {
 
 window.windowResized = () => {
   resizeEverything(isMouse);
+  draw();
 }
 
 function resizeEverything(isMouse) {
@@ -122,12 +128,13 @@ function resizeEverything(isMouse) {
 
   resizeCanvas(newWidth, newHeight, false);
 
+  const approxColWidth = (newWidth > 768) ? 50 : 30;
+  layout.columnCount = Math.floor(width/approxColWidth);
+
   const offsetCents = layout.nextColumnOffsetCents * (layout.columnCount-1);
   const totalHeight = newHeight + offsetCents * layout.centsToPixels;
   print("Resized to: " + newWidth + ", " + newHeight + (isMouse ? " in desktop mode" : "."));
-  tallBuffer.resizeCanvas(newWidth / layout.columnCount, totalHeight, false);
-
-  draw();
+  tallBuffer.resizeCanvas(Math.floor(newWidth / layout.columnCount), totalHeight, false);
 }
 
 function updateScaleFromRatioChord(ratioChord) {
@@ -135,6 +142,11 @@ function updateScaleFromRatioChord(ratioChord) {
   for (let i = 1; i < ratioChord.length; i++) {
     const newCents = cents(ratioChord[0], ratioChord[i])
     scale.cents.push(newCents);
+  }
+  if (scale.cents[scale.cents.length-1] === scale.octaveSizeCents) {
+    // remove last and add 0 at start
+    scale.cents.pop();
+    scale.cents.unshift(0);
   }
 }
 
@@ -161,6 +173,7 @@ window.draw = () => {
   background("#000");
  
   drawKeyboard();
+  //drawKeyboardNew();
 
   // menu and GUI
   fill("#333");
@@ -181,14 +194,14 @@ window.draw = () => {
   });
   text(scaleText, 14, 14);
 
-  let centsText = "scale in cents:";
-  scale.cents.forEach((cent) => {
-    centsText += " " + Math.round(cent);
-  });
-  fill("#FFFFFF70");
-  text(centsText, 14, 14 * 2);
+  // let centsText = "scale in cents:";
+  // scale.cents.forEach((cent) => {
+  //   centsText += " " + Math.round(cent);
+  // });
+  // fill("#FFFFFF70");
+  // text(centsText, 14, 14 * 2);
 
-  text("height in cents: " + height/layout.centsToPixels + ", offset per column: " + layout.nextColumnOffsetCents.toFixed(1), 14, 14 * 3);
+  //text("height in cents: " + height/layout.centsToPixels + ", offset per column: " + layout.nextColumnOffsetCents.toFixed(1), 14, 14 * 3);
 
   pop();
 
@@ -200,13 +213,25 @@ window.draw = () => {
 function drawColumn(buffer) {
   buffer.push();
   // go to bottom
-  buffer.translate(0, buffer.height);
-  buffer.background("#000");
+  buffer.background("black");
   buffer.textSize(10);
   buffer.textAlign(CENTER, CENTER);
 
   // loop upwards, adding everything until height reached
-  const totalCents = height / layout.centsToPixels + layout.nextColumnOffsetCents * (layout.columnCount-1);
+  const totalCents = buffer.height / layout.centsToPixels //height / layout.centsToPixels + layout.nextColumnOffsetCents * (layout.columnCount-1);
+  
+  // for (let i = 0; i < buffer.height; i += buffer.width) {
+  //   buffer.line(           0, -buffer.height + i, buffer.width*0.5, -buffer.height+ buffer.width + i)
+  //   buffer.line(buffer.width, -buffer.height + i, buffer.width*0.5, -buffer.height+ buffer.width + i)
+  // }
+
+  // for (let i = 0; i < (buffer.height/buffer.width); i++) {
+  //   buffer.stroke(i % 20 * 20)
+  //   buffer.line(           0, buffer.height - i * buffer.width, buffer.width*0.5, buffer.height - i * buffer.width - buffer.width)
+  //   buffer.line(buffer.width, buffer.height - i * buffer.width, buffer.width*0.5, buffer.height - i * buffer.width - buffer.width)
+  //   // buffer.text("hi",  buffer.width/2, - buffer.height + i)
+  // }
+  // buffer.line(0, buffer.height, buffer.width, buffer.height- buffer.width)
 
   buffer.stroke("#333");
 
@@ -214,7 +239,7 @@ function drawColumn(buffer) {
   let gridCents = 0;
   while (gridCents < totalCents) {
     gridCents += scale.octaveSizeCents / scale.equalDivisions;
-    const yPos = map(gridCents, 0, totalCents, 0, -buffer.height);
+    const yPos = map(gridCents, 0, totalCents, buffer.height, 0);
     buffer.line(buffer.width*0.05, yPos, buffer.width*0.95, yPos);
   }
 
@@ -225,7 +250,7 @@ function drawColumn(buffer) {
       const inOctaveHue = (cent / scale.octaveSizeCents) * 360;
       buffer.strokeWeight(1);
       buffer.stroke(chroma.oklch(0.6, 0.2, inOctaveHue).hex());
-      const yPos = map(combinedCent, 0, totalCents, 0, -buffer.height);
+      const yPos = map(combinedCent, 0, totalCents, buffer.height, 0);
       buffer.line(buffer.width*0.05, yPos, buffer.width*0.95, yPos);
       buffer.strokeWeight(4);
       buffer.line(buffer.width*0.3, yPos, buffer.width*0.7, yPos);
@@ -236,7 +261,7 @@ function drawColumn(buffer) {
   playedCents.forEach((playedCent) => {
     buffer.strokeWeight(1);
     buffer.stroke("white");
-    const yPos = map(playedCent, 0, totalCents, 0, -buffer.height);
+    const yPos = map(playedCent, 0, totalCents, buffer.height, 0);
     buffer.line(0, yPos, buffer.width, yPos);
     buffer.strokeWeight(4);
     buffer.line(buffer.width*0.05, yPos, buffer.width*0.25, yPos);
@@ -259,15 +284,11 @@ function drawKeyboard() {
   //print("height", height, "buffer height", tallBuffer.height, height + offsetCents * layout.centsToPixels);
 
   for (let x = 0; x < layout.columnCount; x++) {
-    const y = map(x, 0, layout.columnCount-1, offsetCents * layout.centsToPixels, 0)
-    image(tallBuffer, x * columnWidth, 0, columnWidth, height, 0, y, columnWidth, height);
+    const y = Math.round(map(x, 0, layout.columnCount-1, 0, offsetCents * layout.centsToPixels));
+    image(tallBuffer, x * columnWidth, - tallBuffer.height + height + y);
   }
+  noStroke();
 }
-
-let mouseDown = false;
-let isMouse = false;
-let totalKbd = 0;
-let totalTouches = 0;
 
 function handleTouchStart(event) {
   if (event.touches !== undefined) totalTouches = event.touches.length;
