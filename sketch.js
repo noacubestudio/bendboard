@@ -147,6 +147,7 @@ function writeToInput(input) {
   input.value += "octavesize " + scale.octaveSizeCents + " cents" + "\n";
   input.value += "xoffset " + layout.nextColumnOffsetCents + " cents" + "\n";
   input.value += "height " + layout.centsToPixels + " cents per pixel" + "\n";
+  input.value += "snaprange " + scale.maxSnapToCents + " cents" + "\n";
   input.value += "\n";
   input.value += "waveform " + waveform + " (sine, square, triangle, sawtooth)" + "\n";
   input.value += "delay " + delayWet + " (out of 1)";
@@ -197,6 +198,10 @@ function readInput(value) {
           const newCentsToPixels = Number(words[1]);
           if (newCentsToPixels !== undefined && !isNaN(newCentsToPixels) && newCentsToPixels > 0) layout.centsToPixels = newCentsToPixels;
           resizeEverything(isMouse);
+          break;
+        case "snaprange":
+          const newMaxSnap = Number(words[1]);
+          if (newMaxSnap !== undefined && !isNaN(newMaxSnap) && newMaxSnap >= 0) scale.maxSnapToCents = newMaxSnap;
           break;
         case "waveform":
           const newWaveForm = words[1];
