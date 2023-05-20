@@ -29,11 +29,11 @@ const layout = {
 }
 const scale = {
   baseFrequency: 27.50,
-  maxSnapToCents: 0,
+  maxSnapToCents: 30,
   equalDivisions: 12,
   octaveSizeCents: 1200, // range used for scales and EDO
   ratioChord: ratioChordMode([24, 27, 30, 32, 36, 40, 45, 48], 0),
-  cents: [0, 200, 400, 600, 700, 900, 1100] // temp, gets set by ratioChord
+  cents: [] // temp, gets set by ratioChord
 }
 
 function ratioChordMode(chordArray, modeOffset) {
@@ -61,7 +61,7 @@ function randomizeScale() {
   scale.equalDivisions = random([12, 14, 19, 24, 31]);
   const baseRatioChord = random([[24, 27, 30, 32, 36, 40, 45, 48], [4, 5, 6, 7, 8]]);
   scale.ratioChord = ratioChordMode(baseRatioChord, Math.floor(random(baseRatioChord.length+1)));
-  updateScaleFromRatioChord(scale.ratioChord);
+  scale.cents = getScaleFromRatioChord(scale.ratioChord);
 }
 
 
@@ -70,7 +70,8 @@ window.setup = () => {
   tallBuffer = createGraphics(windowWidth/layout.columnCount, windowHeight);
   resizeEverything(isMouse);
 
-  updateScaleFromRatioChord(scale.ratioChord);
+  scale.cents = getScaleFromRatioChord(scale.ratioChord);
+  //scale.cents = getScaleCentsFromEDO(scale.equalDivisions, scale.octaveSizeCents);
   
   cnv.touchStarted(handleTouchStart);
   cnv.touchMoved(handleTouchMove);
@@ -96,6 +97,7 @@ window.setup = () => {
   rectMode(CORNERS);
   tallBuffer.textFont('monospace');
   tallBuffer.rectMode(CORNERS);
+  tallBuffer.strokeJoin(ROUND)
 
   // initialize all channels
   for (let i = 0; i < 10; i++) {
@@ -137,17 +139,27 @@ function resizeEverything(isMouse) {
   tallBuffer.resizeCanvas(Math.floor(newWidth / layout.columnCount), totalHeight, false);
 }
 
-function updateScaleFromRatioChord(ratioChord) {
-  scale.cents = [];
+function getScaleFromRatioChord(ratioChord) {
+  const scaleCents = [];
   for (let i = 1; i < ratioChord.length; i++) {
     const newCents = cents(ratioChord[0], ratioChord[i])
-    scale.cents.push(newCents);
+    scaleCents.push(newCents);
   }
-  if (scale.cents[scale.cents.length-1] === scale.octaveSizeCents) {
+  if (scaleCents[scaleCents.length-1] === scale.octaveSizeCents) {
     // remove last and add 0 at start
-    scale.cents.pop();
-    scale.cents.unshift(0);
+    scaleCents.pop();
+    scaleCents.unshift(0);
   }
+  return scaleCents;
+}
+
+function getScaleCentsFromEDO(edo, octaveSize) {
+  const scaleCents = [];
+  for (let i = 0; i < edo; i++) {
+    scaleCents.push((octaveSize / edo) * i);
+  }
+  print(scaleCents)
+  return scaleCents;
 }
 
 let playedCents = []; // via mouse/touch/kbd
@@ -173,7 +185,6 @@ window.draw = () => {
   background("#000");
  
   drawKeyboard();
-  //drawKeyboardNew();
 
   // button
   textAlign(CENTER, CENTER);
@@ -203,15 +214,6 @@ window.draw = () => {
   });
   text(scaleText, 14, 14);
 
-  // let centsText = "scale in cents:";
-  // scale.cents.forEach((cent) => {
-  //   centsText += " " + Math.round(cent);
-  // });
-  // fill("#FFFFFF70");
-  // text(centsText, 14, 14 * 2);
-
-  //text("height in cents: " + height/layout.centsToPixels + ", offset per column: " + layout.nextColumnOffsetCents.toFixed(1), 14, 14 * 3);
-
   pop();
 
   // stroke("red");
@@ -228,23 +230,9 @@ function drawColumn(buffer) {
 
   // loop upwards, adding everything until height reached
   const totalCents = buffer.height / layout.centsToPixels //height / layout.centsToPixels + layout.nextColumnOffsetCents * (layout.columnCount-1);
-  
-  // for (let i = 0; i < buffer.height; i += buffer.width) {
-  //   buffer.line(           0, -buffer.height + i, buffer.width*0.5, -buffer.height+ buffer.width + i)
-  //   buffer.line(buffer.width, -buffer.height + i, buffer.width*0.5, -buffer.height+ buffer.width + i)
-  // }
-
-  // for (let i = 0; i < (buffer.height/buffer.width); i++) {
-  //   buffer.stroke(i % 20 * 20)
-  //   buffer.line(           0, buffer.height - i * buffer.width, buffer.width*0.5, buffer.height - i * buffer.width - buffer.width)
-  //   buffer.line(buffer.width, buffer.height - i * buffer.width, buffer.width*0.5, buffer.height - i * buffer.width - buffer.width)
-  //   // buffer.text("hi",  buffer.width/2, - buffer.height + i)
-  // }
-  // buffer.line(0, buffer.height, buffer.width, buffer.height- buffer.width)
-
-  buffer.stroke("#333");
 
   // add simple grid
+  buffer.stroke("#333");
   let gridCents = 0;
   while (gridCents < totalCents) {
     gridCents += scale.octaveSizeCents / scale.equalDivisions;
@@ -261,8 +249,15 @@ function drawColumn(buffer) {
       buffer.stroke(chroma.oklch(0.6, 0.2, inOctaveHue).hex());
       const yPos = map(combinedCent, 0, totalCents, buffer.height, 0);
       buffer.line(buffer.width*0.05, yPos, buffer.width*0.95, yPos);
-      buffer.strokeWeight(4);
+      buffer.strokeWeight(6);
       buffer.line(buffer.width*0.3, yPos, buffer.width*0.7, yPos);
+
+      if (cent === 0) {
+        const octave = 1 + octCents / scale.octaveSizeCents;
+        buffer.stroke("black");
+        buffer.fill("white");
+        buffer.text(octave, buffer.width*0.5, yPos);
+      }
     });
   }
 
@@ -452,16 +447,17 @@ window.keyReleased = () => {
 
 function setFromScreenXY(channel, x, y, initType, id) {
 
+  // save last
+  channel.properties.lastCents = channel.properties.cents;
+
+  // set new
   channel.properties.cents = undefined;
+  const channelCents = setCentsFromScreenXY(channel, x, y);
+  channel.properties.cents = channelCents;
 
-  if (scale.cents.length >= 1) {
-    const channelCents = setCentsFromScreenXY(x, y);
-    channel.properties.cents = channelCents;
-
-    // set freq
-    channel.synth.freq(frequency(scale.baseFrequency, channelCents));
-    if (initType !== undefined) initChannel(channel, initType, id);
-  }
+  // set freq
+  channel.synth.freq(frequency(scale.baseFrequency, channelCents));
+  if (initType !== undefined) initChannel(channel, initType, id);
 }
 
 function setFromKbd(channel, position) {
@@ -473,59 +469,102 @@ function setFromKbd(channel, position) {
   channel.synth.freq(frequency(scale.baseFrequency, channelCents));
 }
 
-function setCentsFromScreenXY(x, y) {
+function setCentsFromScreenXY(channel, x, y) {
+  const lastCents = channel.properties.lastCents;
   const gridX = Math.floor((x/width)*layout.columnCount);
   const yInCents = (height-y)/layout.centsToPixels;
   let cents = layout.nextColumnOffsetCents * (gridX + layout.columnsOffsetX) + yInCents;
 
-  // find closest cents
-  if (scale.maxSnapToCents > 0) {
-    const playedInOctaveCents = cents % scale.octaveSizeCents;
-    const scaleOctaveCents = [...scale.cents, scale.octaveSizeCents];
+  if (scale.cents.length >= 1 && scale.maxSnapToCents > 0) {
+    let completelySnappedCents = snapToCents(cents, lastCents);
 
-    let lastPitch = null;
-    let snapToCentsInOctave = null;
-    for (let i = 0; i < scaleOctaveCents.length; i++) {
-      const currentPitch = scaleOctaveCents[i]
-      if (i > 0 && playedInOctaveCents > lastPitch && playedInOctaveCents < currentPitch) {
-        // find which one is closer and break
-        if (abs(playedInOctaveCents - lastPitch) < abs(playedInOctaveCents - currentPitch)) {
-          snapToCentsInOctave = lastPitch;
-        } else {
-          snapToCentsInOctave = currentPitch;
-        }
-        break;
+    if (lastCents === undefined || Math.abs(lastCents-cents) > scale.maxSnapToCents) {
+      // jumped to value outside of snap range
+      // start snap to something in range
+      if (completelySnappedCents !== undefined) {
+        channel.properties.snapTargetCents = completelySnappedCents;
+        channel.properties.snapStartCents = cents;
+        channel.properties.snapStrength = 100;
+      } else {
+        channel.properties.snapTargetCents = undefined;
+        channel.properties.snapStartCents = undefined;
+        channel.properties.snapStrength = 0;
       }
-      lastPitch = currentPitch;
-    }
-    //if (snapToCentsInOctave === scale.octaveSizeCents) snapToCentsInOctave = 0;
+    } else {
+      // this might later include switch to a new target instead
 
-    let snapDistance = Math.round(playedInOctaveCents - snapToCentsInOctave);
-    if (Math.abs(snapDistance) < scale.maxSnapToCents && snapDistance !== 0) {
-      cents -= snapDistance;
-      //print(snapDistance);
+      // smoothly moving and something to snap to
+      if (channel.properties.snapStartCents !== undefined && completelySnappedCents !== undefined) {
+        // distance from start to now compared to target
+        if (channel.properties.snapTargetCents !== undefined) {
+          const targetEndDistance = scale.maxSnapToCents;
+          const targetCurrentDistance = Math.abs(channel.properties.snapTargetCents - cents);
+          const targetStartDistance = Math.abs(channel.properties.snapTargetCents - channel.properties.snapStartCents);
+          channel.properties.snapStrength = map(targetCurrentDistance, targetStartDistance, targetEndDistance, 100, 0);
+        } else {
+          channel.properties.snapStartCents = undefined;
+          channel.properties.snapStrength = 0;
+        }
+        if (channel.properties.snapStrength <= 0) {
+          channel.properties.snapTargetCents = undefined;
+          channel.properties.snapStartCents = undefined;
+          channel.properties.snapStrength = 0;
+        } else if (channel.properties.snapStrength >= 100) {
+          channel.properties.snapStrength = 100;
+        }
+      } else {
+        // moved out of range
+        channel.properties.snapTargetCents = undefined;
+        channel.properties.snapStrength = 0;
+        
+      }
     }
+  
+    // hit target
+    if (Math.abs(cents - completelySnappedCents) < 1) {
+      channel.properties.snapTargetCents = undefined;
+      channel.properties.snapStrength = undefined;
+    }
+  
+    // set
+    if (channel.properties.snapTargetCents !== undefined) {
+      cents = lerp(cents, channel.properties.snapTargetCents, channel.properties.snapStrength/100);
+    }
+    
+    
   }
 
   return cents;
 }
 
-function setEdoStepFromScreenXY(x, y) {
-  const gridX = (x/width)*colCount;
-  const gridY = (1-y/height)*rowCount;
-  const gridXYedoStep = (Math.floor(gridX) + edoStepStartX) * nextColumnCentsOffset + (Math.floor(gridY) + edoStepStartY) * yStep;
+function snapToCents(cents) {
+  const playedInOctaveCents = cents % scale.octaveSizeCents;
+  const scaleOctaveCents = [...scale.cents, scale.octaveSizeCents];
 
-  return gridXYedoStep;
-}
+  let lastPitch = null;
+  let snapToCentsInOctave = null;
+  for (let i = 0; i < scaleOctaveCents.length; i++) {
+    const currentPitch = scaleOctaveCents[i]
+    if (i > 0 && playedInOctaveCents > lastPitch && playedInOctaveCents < currentPitch) {
+      // find which one is closer and break
+      if (abs(playedInOctaveCents - lastPitch) < abs(playedInOctaveCents - currentPitch)) {
+        snapToCentsInOctave = lastPitch;
+      } else {
+        snapToCentsInOctave = currentPitch;
+      }
+      break;
+    }
+    lastPitch = currentPitch;
+  }
+  //if (snapToCentsInOctave === scale.octaveSizeCents) snapToCentsInOctave = 0;
 
-function setGlideFromScreenY(y) {
-  const gridY = (1-y/height)*rowCount;
-  const glidePercent = (gridY % 1 - 0.5) * 2;
-  const dir = Math.sign(glidePercent)
-  //return dir * easeInCirc(glidePercent) * 0.5;
-
-  const mappedGlide = map(Math.abs(glidePercent), 0.5, 1, 0, 1, true);
-  return dir * mappedGlide * 0.5;
+  let snapDistance = Math.round(playedInOctaveCents - snapToCentsInOctave);
+  if (Math.abs(snapDistance) < scale.maxSnapToCents) {
+    cents -= snapDistance;
+    return cents;
+  }
+  // nothing to snap to
+  return undefined;
 }
 
 function initChannel(channel, type, id) {
@@ -581,8 +620,8 @@ function outsideCanvas(x, y) {
 }
 
 function changeSnapping() {
-  scale.maxSnapToCents += 10;
-  scale.maxSnapToCents = scale.maxSnapToCents % 50;
+  scale.maxSnapToCents += 15;
+  scale.maxSnapToCents = scale.maxSnapToCents % 60;
 }
 
 function countInputs() {
