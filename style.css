@@ -14,13 +14,46 @@ canvas {
 #top-container {
   position: absolute;
   display: flex;
-  top: 0px;
+  align-items: flex-start;
 }
 #top-container * {
-  flex-basis: main-size;
-  flex-shrink: 0;
+  /* flex-basis: main-size;
+  flex-shrink: 0; */
   position: relative;
+  margin: 5px;
 }
+button {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  padding: 20px 14px;
+  font-size: 14px;
+
+  background-color: #33333390;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+
+  color: #ffffff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+#settingsInput {
+  display: none;
+
+  background-color: #33333390;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+
+  border: none;
+  color: #ffffff;
+  font-family: monospace;
+  padding: 7px 14px;
+}
+
 #bottom-container {
   position: absolute;
   top: 0px;

@@ -32,14 +32,13 @@ const scale = {
   maxSnapToCents: 30,
   equalDivisions: 12,
   octaveSizeCents: 1200, // range used for scales and EDO
-  ratioChord: ratioChordMode([24, 27, 30, 32, 36, 40, 45, 48], 0),
-  cents: [] // temp, gets set by ratioChord
+  scaleRatios: [24, 27, 30, 32, 36, 40, 45, 48],
+  mode: 0,
+  cents: [], // temp, gets set by scale ratios and mode
+  //chordSteps: [-8, 0, 2, 4]
 }
 
 function ratioChordMode(chordArray, modeOffset) {
-  // check that the last digit is double the first
-  if (chordArray[0] !== chordArray[chordArray.length-1]/2) return chordArray;
-
   modeOffset = modeOffset % (chordArray.length - 1);
   if (modeOffset <= 0) return chordArray;
 
@@ -53,16 +52,15 @@ function ratioChordMode(chordArray, modeOffset) {
       modeArray[index-modeOffset] = num;
     }
   });
-  print(chordArray, modeArray, modeOffset);
   return modeArray;
 }
 
-function randomizeScale() {
-  scale.equalDivisions = random([12, 14, 19, 24, 31]);
-  const baseRatioChord = random([[24, 27, 30, 32, 36, 40, 45, 48], [4, 5, 6, 7, 8]]);
-  scale.ratioChord = ratioChordMode(baseRatioChord, Math.floor(random(baseRatioChord.length+1)));
-  scale.cents = getScaleFromRatioChord(scale.ratioChord);
-}
+// function randomizeScale() {
+//   scale.equalDivisions = random([12, 14, 19, 24, 31]);
+//   scale.scaleRatios = random([[24, 27, 30, 32, 36, 40, 45, 48], [4, 5, 6, 7, 8]]);
+//   scale.mode = Math.floor(random(baseRatioChord.length+1));
+//   scale.cents = getScaleFromRatioChord(ratioChordMode(baseRatioChord, scale.mode));
+// }
 
 
 window.setup = () => {
@@ -70,9 +68,33 @@ window.setup = () => {
   tallBuffer = createGraphics(windowWidth/layout.columnCount, windowHeight);
   resizeEverything(isMouse);
 
-  scale.cents = getScaleFromRatioChord(scale.ratioChord);
-  //scale.cents = getScaleCentsFromEDO(scale.equalDivisions, scale.octaveSizeCents);
-  
+
+  // GUI and settings
+  const menuButton = document.getElementById("menuButton");
+  const settingsInput = document.getElementById("settingsInput");
+
+  // initial write to the settings input
+  writeToInput(settingsInput);
+
+  // show/hide the settings input
+  menuButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (settingsInput.style.display === 'none') {
+      settingsInput.style.display = 'block';
+    } else {
+      settingsInput.style.display = 'none';
+    }
+  });
+
+  // read the settings input if it changed and make changes
+  settingsInput.addEventListener("input", (event) => {
+    const editedText = event.target.value;
+    readInput(editedText);
+  });
+
+  // initial settings from the default inputs
+  setScale();
+
   cnv.touchStarted(handleTouchStart);
   cnv.touchMoved(handleTouchMove);
   cnv.touchEnded(handleTouchEnd);
@@ -116,9 +138,84 @@ window.setup = () => {
   }
 }
 
+function writeToInput(input) {
+  input.value = "";
+  input.value += "edo " + scale.equalDivisions + "\n";
+  input.value += "scale " + scale.scaleRatios.join(":") + "\n";
+  input.value += "mode " + scale.mode + "\n";
+  input.value += "base " + scale.baseFrequency + " hz" + "\n";
+  input.value += "octavesize " + scale.octaveSizeCents + " cents" + "\n";
+  input.value += "xoffset " + layout.nextColumnOffsetCents + " cents" + "\n";
+  input.value += "height " + layout.centsToPixels + " cents per pixel";
+}
+
+function readInput(value) {
+  const lines = value.split("\n");
+
+  lines.forEach((line) => {
+    const words = line.trim().split(" ");
+    if (words.length > 0 && words[0].length > 0) {
+      switch (words[0]) {
+        case "edo":
+          const newEDO = Number(words[1]);
+          if (newEDO !== undefined && !isNaN(newEDO) && newEDO > 1) scale.equalDivisions = newEDO;
+          break;
+        case "scale":
+          if (words[1] !== undefined) {
+            const newScaleRatios = words[1].split(":");
+            if (newScaleRatios.length >= 2 && newScaleRatios.every((element) => typeof element === "number")) {
+              scale.scaleRatios = newScaleRatios;
+            }
+          } else {
+            scale.scaleRatios = [];
+          }
+          setScale();
+          break;
+        case "mode":
+          const newMode = Number(words[1]);
+          if (newMode !== undefined && !isNaN(newMode)) scale.mode = newMode;
+          setScale();
+          break;
+        case "base":
+          const newBase = Number(words[1]);
+          if (newBase !== undefined && !isNaN(newBase)) scale.baseFrequency = newBase;
+          break;
+        case "octavesize":
+          const newOctaveSize = Number(words[1]);
+          if (newOctaveSize !== undefined && !isNaN(newOctaveSize) && newOctaveSize > 100) scale.octaveSizeCents = newOctaveSize;
+          resizeEverything(isMouse);
+          break;
+        case "xoffset":
+          const newOffsetCents = Number(words[1]);
+          if (newOffsetCents !== undefined && !isNaN(newOffsetCents) && newOffsetCents > 0) layout.nextColumnOffsetCents = newOffsetCents;
+          resizeEverything(isMouse);
+          break;
+        case "height":
+          const newCentsToPixels = Number(words[1]);
+          if (newCentsToPixels !== undefined && !isNaN(newCentsToPixels)) scale.centsToPixels = newCentsToPixels;
+          resizeEverything(isMouse);
+          break;
+        default:
+          print("Property " + words[0] + "was not found!")
+          break;
+      }
+    }
+  });
+
+  window.draw();
+}
+
+function setScale() {
+  if (scale.scaleRatios.length > 0) {
+    scale.cents = getScaleFromRatioChord(ratioChordMode(scale.scaleRatios, scale.mode));
+  } else {
+    scale.cents = getScaleCentsFromEDO(scale.equalDivisions, scale.octaveSizeCents);
+  }
+}
+
 window.windowResized = () => {
   resizeEverything(isMouse);
-  draw();
+  window.draw();
 }
 
 function resizeEverything(isMouse) {
@@ -135,7 +232,6 @@ function resizeEverything(isMouse) {
 
   const offsetCents = layout.nextColumnOffsetCents * (layout.columnCount-1);
   const totalHeight = newHeight + offsetCents * layout.centsToPixels;
-  print("Resized to: " + newWidth + ", " + newHeight + (isMouse ? " in desktop mode" : "."));
   tallBuffer.resizeCanvas(Math.floor(newWidth / layout.columnCount), totalHeight, false);
 }
 
@@ -158,66 +254,45 @@ function getScaleCentsFromEDO(edo, octaveSize) {
   for (let i = 0; i < edo; i++) {
     scaleCents.push((octaveSize / edo) * i);
   }
-  print(scaleCents)
   return scaleCents;
 }
 
-let playedCents = []; // via mouse/touch/kbd
-
-function updatePlayed() {
-  playedCents = [];
-
-  // push sound channels that are on to the array of played steps
-  channels.forEach((channel, index)=>{
-    if (channel.source !== "off") {
-      const cent = channel.properties.cents;
-      if (cent !== undefined) {
-        playedCents.push(cent);
-      }
-    }
-  });
-}
-
 window.draw = () => {
-
-  updatePlayed();
 
   background("#000");
  
   drawKeyboard();
 
-  // button
-  textAlign(CENTER, CENTER);
+  // // button
+  // textAlign(CENTER, CENTER);
 
-  fill("#333");
-  rect(4, 4, 56, 46, 4);
-  fill("white");
-  text("Rand.", 30, 25);
+  // fill("#333");
+  // rect(4, 4, 56, 46, 4);
+  // fill("white");
+  // text("Rand.", 30, 25);
 
-  push();
-  translate(60, 0);
-  fill("#333");
-  rect(4, 4, 56, 46, 4);
-  fill("white");
-  text("Snap", 30, 16);
-  text(scale.maxSnapToCents, 30, 34);
-
-
-  translate(50, 0);
-  textSize(10);
-  textAlign(LEFT, BOTTOM);
+  // push();
+  // translate(60, 0);
+  // fill("#333");
+  // rect(4, 4, 56, 46, 4);
+  // fill("white");
+  // text("Snap", 30, 16);
+  // text(scale.maxSnapToCents, 30, 34);
 
 
-  let scaleText = scale.equalDivisions + " edo, scale chord";
-  scale.ratioChord.forEach((num, index) => {
-    scaleText += (index > 0 ? ":" : " ") + num;
-  });
-  text(scaleText, 14, 14);
+  // translate(50, 0);
+  // textSize(10);
+  // // textAlign(LEFT, BOTTOM);
 
-  pop();
 
-  // stroke("red");
-  // line(0, 0, width, height);
+  // let scaleText = scale.equalDivisions + " edo, scale chord";
+  // scale.scaleRatios.forEach((num, index) => {
+  //   scaleText += (index > 0 ? ":" : " ") + num;
+  // });
+  // text(scaleText, 14, 14);
+
+  // pop();
+
   noStroke();
 }
 
@@ -262,17 +337,20 @@ function drawColumn(buffer) {
   }
 
   // playing
-  playedCents.forEach((playedCent) => {
-    buffer.strokeWeight(1);
-    buffer.stroke("white");
-    const yPos = map(playedCent, 0, totalCents, buffer.height, 0);
-    buffer.line(0, yPos, buffer.width, yPos);
-    buffer.strokeWeight(4);
-    buffer.line(buffer.width*0.05, yPos, buffer.width*0.25, yPos);
-    buffer.line(buffer.width*0.75, yPos, buffer.width*0.95, yPos);
-    buffer.noStroke();
-    buffer.fill("white");
-    buffer.text(Math.round(playedCent % scale.octaveSizeCents), 0.5 * buffer.width, yPos - 15);
+  channels.forEach((channel) => {
+    if (channel.source !== "off" && channel.properties.cents !== undefined) {
+      // draw line for played cent
+      buffer.strokeWeight(1);
+      buffer.stroke("white");
+      const yPos = map(channel.properties.cents, 0, totalCents, buffer.height, 0);
+      buffer.line(0, yPos, buffer.width, yPos);
+      buffer.strokeWeight(4);
+      buffer.line(buffer.width*0.05, yPos, buffer.width*0.25, yPos);
+      buffer.line(buffer.width*0.75, yPos, buffer.width*0.95, yPos);
+      buffer.noStroke();
+      buffer.fill("white");
+      buffer.text(Math.round(channel.properties.cents % scale.octaveSizeCents), 0.5 * buffer.width, yPos - 15);
+    }
   });
 
   buffer.strokeWeight(1);
@@ -284,165 +362,13 @@ function drawKeyboard() {
   const offsetCents = layout.nextColumnOffsetCents * (layout.columnCount-1);
 
   drawColumn(tallBuffer);
-  //print("kb", layout.nextColumnOffsetCents * (layout.columnCount-1), offsetCents);
-  //print("height", height, "buffer height", tallBuffer.height, height + offsetCents * layout.centsToPixels);
 
   for (let x = 0; x < layout.columnCount; x++) {
     const y = Math.round(map(x, 0, layout.columnCount-1, 0, offsetCents * layout.centsToPixels));
     image(tallBuffer, x * columnWidth, - tallBuffer.height + height + y);
   }
+  
   noStroke();
-}
-
-function handleTouchStart(event) {
-  if (event.touches !== undefined) totalTouches = event.touches.length;
-  userStartAudio();
-  event.preventDefault();
-
-  event.changedTouches.forEach((touch) => {
-    const id = touch.identifier;
-    const x = touch.clientX; const y = touch.clientY - 0;
-    if (outsideCanvas(x, y)) return;
-    
-    const channel = channels[firstChannel("off")];
-    if (channel !== undefined) {
-      setFromScreenXY(channel, x, y, "touch", id);
-
-      window.draw();
-    }
-    //print(touch)
-  })
-}
-
-function handleTouchMove(event) {
-  event.changedTouches.forEach((touch) => {
-    const id = touch.identifier;
-    const x = touch.clientX; const y = touch.clientY - 0;
-    if (outsideCanvas(x, y)) return;
-    
-    const channel = channels[exactChannel("touch", id)];
-    if (channel !== undefined) {
-      setFromScreenXY(channel, x, y);
-  
-      window.draw();
-    }
-  })
-}
-
-function handleTouchEnd(event) {
-  if (event.touches !== undefined) totalTouches = event.touches.length;
-  event.changedTouches.forEach((touch) => {
-    const id = touch.identifier;
-    //const x = touch.clientX; const y = touch.clientY - 60;
-    
-    const channel = channels[exactChannel("touch", id)];
-    if (channel !== undefined) {
-      channel.source = "off";
-      channel.properties = {};
-      channel.synth.stop();
-      if (countInputs() === 0) {
-        channels.forEach((channel, index) => {
-          if (index !== 0) {channel.properties = {}}
-          channel.source = "off";
-          channel.synth.stop();
-        })
-      }
-      
-      window.draw();
-    }
-  })
-}
-
-window.mouseDragged = () => {
-  if (!isMouse)
-    return;
-  if (outsideCanvas(mouseX, mouseY))
-    return;
-
-  const channel = channels[firstChannel("mouse")];
-  if (channel !== undefined) {
-    setFromScreenXY(channel, mouseX, mouseY);
-
-    window.draw();
-  }
-};
-
-window.mousePressed = () => {
-  userStartAudio();
-  if (!isMouse) return
-  if (outsideCanvas(mouseX, mouseY)) return;
-  
-  mouseDown = true;
-  
-  const channel = channels[firstChannel("off")];
-  if (channel !== undefined) {
-    setFromScreenXY(channel, mouseX, mouseY, "mouse");
-
-    window.draw();
-  }
-}
-
-window.mouseReleased = () => {
-  if (!isMouse) return
-  mouseDown = false;
-  
-  const channel = channels[firstChannel("mouse")];
-  if (channel !== undefined) {
-    channel.source = "off";
-    channel.properties = {};
-    channel.synth.stop();
-    if (countInputs() === 0) {
-      channels.forEach((channel, index) => {
-        channel.properties = {}
-        channel.source = "off";
-        channel.synth.stop();
-      });
-    }
-    
-    window.draw();
-  }
-}
-
-function handleMouseOver() {
-  if (!isMouse) {
-    isMouse = true;
-    resizeEverything(isMouse);
-  }
-}
-
-window.keyPressed = () => {
-
-  if (document.activeElement.type !== undefined) return
-  if (!"1234567890".includes(key)) return
-  userStartAudio();
-  totalKbd++;
-  
-  const position = (key === "0") ? 10 : Number(key);
-
-  const channel = channels[firstChannel("off")];
-  if (channel !== undefined) {
-    setFromKbd(channel, position);
-    channel.source = "kbd";
-    channel.synth.start();
-    window.draw();
-  }
-}
-
-window.keyReleased = () => {
-  
-  if (document.activeElement.type !== undefined) return
-  if (!"1234567890".includes(key)) return
-  totalKbd--;
-  const position = (key === "0") ? 10 : Number(key);
-
-  const channel = channels[exactChannel("kbd", position)];
-  if (channel !== undefined) {
-    channel.source = "off";
-    channel.properties = {};
-    channel.synth.stop();
-    window.draw();
-  }
-  return false; // prevent any default behavior
 }
 
 function setFromScreenXY(channel, x, y, initType, id) {
@@ -450,13 +376,15 @@ function setFromScreenXY(channel, x, y, initType, id) {
   // save last
   channel.properties.lastCents = channel.properties.cents;
 
-  // set new
+  // set new cents
   channel.properties.cents = undefined;
   const channelCents = setCentsFromScreenXY(channel, x, y);
   channel.properties.cents = channelCents;
 
   // set freq
   channel.synth.freq(frequency(scale.baseFrequency, channelCents));
+
+  // make new channel if started
   if (initType !== undefined) initChannel(channel, initType, id);
 }
 
@@ -605,18 +533,18 @@ function outsideCanvas(x, y) {
   if (y < 0) return true
   if (y > height) return true
 
-  if (x < 60 && y < 50) {
-    // menu
-    randomizeScale();
-    draw();
-    return true;
-  }
-  if (x < 120 && y < 50) {
-    // menu
-    changeSnapping();
-    draw();
-    return true;
-  }
+  // if (x < 60 && y < 50) {
+  //   // menu
+  //   randomizeScale();
+  //   window.draw();
+  //   return true;
+  // }
+  // if (x < 120 && y < 50) {
+  //   // menu
+  //   changeSnapping();
+  //   window.draw();
+  //   return true;
+  // }
 }
 
 function changeSnapping() {
@@ -643,4 +571,156 @@ function frequency(base, cents) {
 
 function easeInCirc(x) {
   return 1 - Math.sqrt(1 - Math.pow(x, 2));
+}
+
+function handleTouchStart(event) {
+  if (event.touches !== undefined) totalTouches = event.touches.length;
+  userStartAudio();
+  event.preventDefault();
+
+  event.changedTouches.forEach((touch) => {
+    const id = touch.identifier;
+    const x = touch.clientX; const y = touch.clientY - 0;
+    if (outsideCanvas(x, y)) return;
+    
+    const channel = channels[firstChannel("off")];
+    if (channel !== undefined) {
+      setFromScreenXY(channel, x, y, "touch", id);
+
+      window.draw();
+    }
+  })
+}
+
+function handleTouchMove(event) {
+  event.changedTouches.forEach((touch) => {
+    const id = touch.identifier;
+    const x = touch.clientX; const y = touch.clientY - 0;
+    if (outsideCanvas(x, y)) return;
+    
+    const channel = channels[exactChannel("touch", id)];
+    if (channel !== undefined) {
+      setFromScreenXY(channel, x, y);
+  
+      window.draw();
+    }
+  })
+}
+
+function handleTouchEnd(event) {
+  if (event.touches !== undefined) totalTouches = event.touches.length;
+  event.changedTouches.forEach((touch) => {
+    const id = touch.identifier;
+    //const x = touch.clientX; const y = touch.clientY - 60;
+    
+    const channel = channels[exactChannel("touch", id)];
+    if (channel !== undefined) {
+      channel.source = "off";
+      channel.properties = {};
+      channel.synth.stop();
+
+      // stop all
+      if (countInputs() === 0) {
+        channels.forEach((channel) => {
+          channel.properties = {};
+          channel.source = "off";
+          channel.synth.stop();
+        })
+      }
+      
+      window.draw();
+    }
+  })
+}
+
+window.mouseDragged = () => {
+  if (!isMouse)
+    return;
+  if (outsideCanvas(mouseX, mouseY))
+    return;
+
+  const channel = channels[firstChannel("mouse")];
+  if (channel !== undefined) {
+    setFromScreenXY(channel, mouseX, mouseY);
+
+    window.draw();
+  }
+};
+
+window.mousePressed = () => {
+  userStartAudio();
+  if (!isMouse) return
+  if (outsideCanvas(mouseX, mouseY)) return;
+  
+  mouseDown = true;
+  
+  const channel = channels[firstChannel("off")];
+  if (channel !== undefined) {
+    setFromScreenXY(channel, mouseX, mouseY, "mouse");
+
+    window.draw();
+  }
+}
+
+window.mouseReleased = () => {
+  if (!isMouse) return
+  mouseDown = false;
+  
+  const channel = channels[firstChannel("mouse")];
+  if (channel !== undefined) {
+    channel.source = "off";
+    channel.properties = {};
+    channel.synth.stop();
+    if (countInputs() === 0) {
+      channels.forEach((channel) => {
+        channel.properties = {}
+        channel.source = "off";
+        channel.synth.stop();
+      });
+    }
+    
+    window.draw();
+  }
+}
+
+function handleMouseOver() {
+  if (!isMouse) {
+    isMouse = true;
+    resizeEverything(isMouse);
+  }
+}
+
+window.keyPressed = () => {
+
+  if (document.activeElement.type !== undefined) return
+  if (!"1234567890".includes(key)) return
+  userStartAudio();
+  totalKbd++;
+  
+  const position = (key === "0") ? 10 : Number(key);
+
+  const channel = channels[firstChannel("off")];
+  if (channel !== undefined) {
+    setFromKbd(channel, position);
+    channel.source = "kbd";
+    channel.synth.start();
+    window.draw();
+  }
+}
+
+window.keyReleased = () => {
+  
+  if (document.activeElement.type !== undefined) return
+  if (!"1234567890".includes(key)) return
+  totalKbd--;
+  const position = (key === "0") ? 10 : Number(key);
+
+  const channel = channels[exactChannel("kbd", position)];
+  if (channel !== undefined) {
+    channel.source = "off";
+    channel.properties = {};
+    channel.synth.stop();
+    window.draw();
+  }
+  return false; // prevent any default behavior
 }
