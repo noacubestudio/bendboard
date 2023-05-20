@@ -24,6 +24,7 @@ const layout = {
   // columns
   nextColumnOffsetCents: 200,
   columnsOffsetX: 0, //WIP, BROKEN
+  idealWidth: 50,
   columnCount: 12, // set in resizeEverything
   // in column
   centsToPixels: 0.75
@@ -140,13 +141,14 @@ window.setup = () => {
 function writeToInput(input) {
   input.value = "";
   input.value += "edo " + scale.equalDivisions + "\n";
-  input.value += "scale " + scale.scaleRatios.join(":") + "\n";
+  input.value += "scale " + scale.scaleRatios.join(":") + " (ratio or off)"+ "\n";
   input.value += "mode " + scale.mode + "\n";
   input.value += "\n";
   input.value += "base " + scale.baseFrequency + " hz" + "\n";
   input.value += "octavesize " + scale.octaveSizeCents + " cents" + "\n";
   input.value += "xoffset " + layout.nextColumnOffsetCents + " cents" + "\n";
-  input.value += "height " + layout.centsToPixels + " cents per pixel" + "\n";
+  input.value += "height " + layout.centsToPixels + " pixels / cent" + "\n";
+  input.value += "columnpx " + layout.idealWidth + " pixels (approx.)" + "\n";
   input.value += "snaprange " + scale.maxSnapToCents + " cents" + "\n";
   input.value += "\n";
   input.value += "waveform " + waveform + " (sine, square, triangle, sawtooth)" + "\n";
@@ -187,6 +189,7 @@ function readInput(value) {
         case "octavesize":
           const newOctaveSize = Number(words[1]);
           if (newOctaveSize !== undefined && !isNaN(newOctaveSize) && newOctaveSize > 100) scale.octaveSizeCents = newOctaveSize;
+          setScale();
           resizeEverything(isMouse);
           break;
         case "xoffset":
@@ -197,6 +200,11 @@ function readInput(value) {
         case "height":
           const newCentsToPixels = Number(words[1]);
           if (newCentsToPixels !== undefined && !isNaN(newCentsToPixels) && newCentsToPixels > 0) layout.centsToPixels = newCentsToPixels;
+          resizeEverything(isMouse);
+          break;
+        case "columnpx":
+          const newIdealWidth = Number(words[1]);
+          if (newIdealWidth !== undefined && !isNaN(newIdealWidth) && newIdealWidth > 10 && newIdealWidth < width) layout.idealWidth = newIdealWidth;
           resizeEverything(isMouse);
           break;
         case "snaprange":
@@ -251,7 +259,7 @@ function resizeEverything(isMouse) {
 
   resizeCanvas(newWidth, newHeight, false);
 
-  const approxColWidth = (newWidth > 768) ? 50 : 30;
+  const approxColWidth = (newWidth > 768) ? layout.idealWidth : layout.idealWidth * 0.6;
   layout.columnCount = Math.floor(width/approxColWidth);
 
   const offsetCents = layout.nextColumnOffsetCents * (layout.columnCount-1);
@@ -376,7 +384,7 @@ function drawColumn(buffer) {
       buffer.line(buffer.width*0.75, yPos, buffer.width*0.95, yPos);
       buffer.noStroke();
       buffer.fill("white");
-      buffer.text(Math.round(channel.properties.cents % scale.octaveSizeCents), 0.5 * buffer.width, yPos - 15);
+      buffer.text(Math.round(channel.properties.cents) % scale.octaveSizeCents, 0.5 * buffer.width, yPos - 15);
     }
   });
 
@@ -485,10 +493,7 @@ function setCentsFromScreenXY(channel, x, y) {
     if (channel.properties.snapTargetCents !== undefined) {
       cents = lerp(cents, channel.properties.snapTargetCents, channel.properties.snapStrength/100);
     }
-    
-    
   }
-
   return cents;
 }
 
