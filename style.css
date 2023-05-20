@@ -37,7 +37,7 @@ button {
 
   color: #ffffff;
   border: none;
-  border-radius: 5px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -49,9 +49,11 @@ button {
   backdrop-filter: blur(8px);
 
   border: none;
+  border-radius: 6px;
   color: #ffffff;
   font-family: monospace;
-  padding: 7px 14px;
+  padding: 10px 14px;
+  font-size: 14px;
 }
 
 #bottom-container {

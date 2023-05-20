@@ -9,6 +9,7 @@ let totalTouches = 0;
 
 // sound settings
 let lpFilter; let delayFilter;
+let delayWet = 0.7;
 let waveform = "sawtooth";
 
 const channels = [];
@@ -62,12 +63,10 @@ function ratioChordMode(chordArray, modeOffset) {
 //   scale.cents = getScaleFromRatioChord(ratioChordMode(baseRatioChord, scale.mode));
 // }
 
-
 window.setup = () => {
   cnv = createCanvas(windowWidth, windowHeight).parent(container);
   tallBuffer = createGraphics(windowWidth/layout.columnCount, windowHeight);
   resizeEverything(isMouse);
-
 
   // GUI and settings
   const menuButton = document.getElementById("menuButton");
@@ -79,7 +78,7 @@ window.setup = () => {
   // show/hide the settings input
   menuButton.addEventListener("click", (event) => {
     event.stopPropagation();
-    if (settingsInput.style.display === 'none') {
+    if (settingsInput.style.display !== 'block') {
       settingsInput.style.display = 'block';
     } else {
       settingsInput.style.display = 'none';
@@ -112,7 +111,7 @@ window.setup = () => {
   delayFilter = new p5.Delay();
   delayFilter.process(lpFilter, 0.18, .6, 2300);
   delayFilter.setType(1);
-  delayFilter.drywet(0.7);
+  delayFilter.drywet(delayWet);
 
   noLoop();
   textFont('monospace');
@@ -143,10 +142,14 @@ function writeToInput(input) {
   input.value += "edo " + scale.equalDivisions + "\n";
   input.value += "scale " + scale.scaleRatios.join(":") + "\n";
   input.value += "mode " + scale.mode + "\n";
+  input.value += "\n";
   input.value += "base " + scale.baseFrequency + " hz" + "\n";
   input.value += "octavesize " + scale.octaveSizeCents + " cents" + "\n";
   input.value += "xoffset " + layout.nextColumnOffsetCents + " cents" + "\n";
-  input.value += "height " + layout.centsToPixels + " cents per pixel";
+  input.value += "height " + layout.centsToPixels + " cents per pixel" + "\n";
+  input.value += "\n";
+  input.value += "waveform " + waveform + " (sine, square, triangle, sawtooth)" + "\n";
+  input.value += "delay " + delayWet + " (out of 1)";
 }
 
 function readInput(value) {
@@ -161,13 +164,13 @@ function readInput(value) {
           if (newEDO !== undefined && !isNaN(newEDO) && newEDO > 1) scale.equalDivisions = newEDO;
           break;
         case "scale":
-          if (words[1] !== undefined) {
+          if (words[1] === undefined || ["off", "false", "0", "none"].includes(words[1])) {
+            scale.scaleRatios = [];
+          } else {
             const newScaleRatios = words[1].split(":");
-            if (newScaleRatios.length >= 2 && newScaleRatios.every((element) => typeof element === "number")) {
+            if (newScaleRatios.length >= 2 && newScaleRatios.every((element) => (!isNaN(Number(element)) && element.length > 0))) {
               scale.scaleRatios = newScaleRatios;
             }
-          } else {
-            scale.scaleRatios = [];
           }
           setScale();
           break;
@@ -192,11 +195,27 @@ function readInput(value) {
           break;
         case "height":
           const newCentsToPixels = Number(words[1]);
-          if (newCentsToPixels !== undefined && !isNaN(newCentsToPixels)) scale.centsToPixels = newCentsToPixels;
+          if (newCentsToPixels !== undefined && !isNaN(newCentsToPixels) && newCentsToPixels > 0) layout.centsToPixels = newCentsToPixels;
           resizeEverything(isMouse);
           break;
+        case "waveform":
+          const newWaveForm = words[1];
+          if (["sine", "square", "triangle","sawtooth"].includes(newWaveForm)) {
+            waveform = newWaveForm;
+            for (let i = 0; i < channels.length; i++) {
+              channels[i].synth.setType(waveform);
+            }
+          }
+          break;
+        case "delay":
+          const newWet = Number(words[1]);
+          if (newWet !== undefined && !isNaN(newWet) && newWet > 0) {
+            delayWet = newWet;
+            delayFilter.drywet(delayWet);
+          }
+          break;
         default:
-          print("Property " + words[0] + "was not found!")
+          print("Property " + words[0] + " was not found!")
           break;
       }
     }
@@ -306,13 +325,16 @@ function drawColumn(buffer) {
   // loop upwards, adding everything until height reached
   const totalCents = buffer.height / layout.centsToPixels //height / layout.centsToPixels + layout.nextColumnOffsetCents * (layout.columnCount-1);
 
-  // add simple grid
-  buffer.stroke("#333");
-  let gridCents = 0;
-  while (gridCents < totalCents) {
-    gridCents += scale.octaveSizeCents / scale.equalDivisions;
-    const yPos = map(gridCents, 0, totalCents, buffer.height, 0);
-    buffer.line(buffer.width*0.05, yPos, buffer.width*0.95, yPos);
+  // add simple grid, only if there is a scale as well
+  // if there is no scale, then all notes are visible so this isn't needed
+  if (scale.scaleRatios !== undefined && scale.scaleRatios.length > 0) {
+    buffer.stroke("#333");
+    let gridCents = 0;
+    while (gridCents < totalCents) {
+      gridCents += scale.octaveSizeCents / scale.equalDivisions;
+      const yPos = map(gridCents, 0, totalCents, buffer.height, 0);
+      buffer.line(buffer.width*0.05, yPos, buffer.width*0.95, yPos);
+    }
   }
 
   // scale pitches
@@ -367,7 +389,7 @@ function drawKeyboard() {
     const y = Math.round(map(x, 0, layout.columnCount-1, 0, offsetCents * layout.centsToPixels));
     image(tallBuffer, x * columnWidth, - tallBuffer.height + height + y);
   }
-  
+
   noStroke();
 }
 
