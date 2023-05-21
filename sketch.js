@@ -319,27 +319,7 @@ window.draw = () => {
  
   drawKeyboard();
 
-  // // button
-  // textAlign(CENTER, CENTER);
-
-  // fill("#333");
-  // rect(4, 4, 56, 46, 4);
-  // fill("white");
-  // text("Rand.", 30, 25);
-
-  // push();
-  // translate(60, 0);
-  // fill("#333");
-  // rect(4, 4, 56, 46, 4);
-  // fill("white");
-  // text("Snap", 30, 16);
-  // text(scale.maxSnapToCents, 30, 34);
-
-
-  // translate(50, 0);
-  // textSize(10);
-  // // textAlign(LEFT, BOTTOM);
-
+  drawOctaveCircle();
 
   // let scaleText = scale.equalDivisions + " edo, scale chord";
   // scale.scaleRatios.forEach((num, index) => {
@@ -350,6 +330,63 @@ window.draw = () => {
   // pop();
 
   noStroke();
+}
+
+function drawOctaveCircle() {
+  push();
+  const radius = 36;
+  translate(width-radius-10, radius+10);
+
+  fill("#00000080")
+  stroke("#444")
+  ellipse(0, 0, radius*2, radius*2);
+  strokeWeight(2);
+
+  // add simple grid, only if there is a scale as well
+  // if there is no scale, then all notes are visible so this isn't needed
+  if (scale.scaleRatios !== undefined && scale.scaleRatios.length > 0) {
+    stroke("#333");
+    let stepCents = 0;
+    while (stepCents < scale.octaveSizeCents) {
+      stepCents += scale.octaveSizeCents / scale.equalDivisions;
+      const percentOfOctave = stepCents / scale.octaveSizeCents;
+      const angle = -90 + percentOfOctave * 360;
+      const outerX = radius * cos(radians(angle));
+      const outerY = radius * sin(radians(angle));
+      line(0, 0, outerX, outerY);
+    }
+  }
+
+  strokeWeight(2);
+
+  // scale
+  scale.cents.forEach((cent) => {
+    const percentOfOctave = cent / scale.octaveSizeCents;
+    const hue = percentOfOctave * 360;
+    const angle = -90 + percentOfOctave * 360;
+    const outerX = radius * cos(radians(angle));
+    const outerY = radius * sin(radians(angle));
+    stroke(chroma.oklch(0.6, 0.2, hue).hex()); // Set line color
+    line(0, 0, outerX, outerY);
+  });
+
+  strokeWeight(1);
+  stroke("white");
+
+  // playing
+  channels.forEach((channel) => {
+    if (channel.source !== "off" && channel.properties.cents !== undefined) {
+      // draw line for played cent
+      const percentOfOctave = (channel.properties.cents % scale.octaveSizeCents) / scale.octaveSizeCents;
+      const angle = -90 + percentOfOctave * 360;
+      const outerX = radius * cos(radians(angle));
+      const outerY = radius * sin(radians(angle));
+      line(0, 0, outerX, outerY);
+    }
+  });
+
+
+  pop();
 }
 
 function drawColumn(buffer) {
