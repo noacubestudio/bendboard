@@ -78,6 +78,7 @@ window.setup = () => {
 
   // show/hide the settings input
   menuButton.addEventListener("click", (event) => {
+    event.preventDefault();
     event.stopPropagation();
     if (settingsInput.style.display !== 'block') {
       settingsInput.style.display = 'block';
@@ -91,6 +92,29 @@ window.setup = () => {
     const editedText = event.target.value;
     readInput(editedText);
   });
+
+  // Copy and paste
+  // const copyButton = document.getElementById("copyButton");
+  // const pasteButton = document.getElementById("pasteButton");
+
+  // copyButton.addEventListener("click", (event) => {
+  //   event.preventDefault();
+  //   navigator.clipboard.writeText(settingsInput.value)
+  //   .catch((error) => {
+  //     console.error("Failed to copy text to clipboard:", error);
+  //   });
+  // });
+  // pasteButton.addEventListener("click", (event) => {
+  //   event.preventDefault();
+  //   navigator.clipboard.read()
+  //   .then((clipboardText) => {
+  //     settingsInput.value = clipboardText;
+  //   })
+  //   .catch((error) => {
+  //     console.error("Failed to read clipboard content:", error);
+  //   });
+  // });
+
 
   // initial settings from the default inputs
   setScale();
@@ -140,26 +164,26 @@ window.setup = () => {
 
 function writeToInput(input) {
   input.value = "";
-  input.value += "edo " + scale.equalDivisions + "\n";
-  input.value += "scale " + scale.scaleRatios.join(":") + " (ratio or off)"+ "\n";
-  input.value += "mode " + scale.mode + "\n";
+  input.value += "edo        " + scale.equalDivisions + "\n";
+  input.value += "scale      " + scale.scaleRatios.join(":") + " (ratio or off)"+ "\n";
+  input.value += "mode       " + scale.mode + "\n";
   input.value += "\n";
-  input.value += "base " + scale.baseFrequency + " hz" + "\n";
+  input.value += "base       " + scale.baseFrequency + " hz" + "\n";
   input.value += "octavesize " + scale.octaveSizeCents + " cents" + "\n";
-  input.value += "xoffset " + layout.nextColumnOffsetCents + " cents" + "\n";
-  input.value += "height " + layout.centsToPixels + " pixels / cent" + "\n";
-  input.value += "columnpx " + layout.idealWidth + " pixels (approx.)" + "\n";
-  input.value += "snaprange " + scale.maxSnapToCents + " cents" + "\n";
+  input.value += "xoffset    " + layout.nextColumnOffsetCents + " cents" + "\n";
+  input.value += "height     " + layout.centsToPixels + " pixels / cent" + "\n";
+  input.value += "columnpx   " + layout.idealWidth + " pixels (approx.)" + "\n";
+  input.value += "snaprange  " + scale.maxSnapToCents + " cents" + "\n";
   input.value += "\n";
-  input.value += "waveform " + waveform + " (sine, square, triangle, sawtooth)" + "\n";
-  input.value += "delay " + delayWet + " (out of 1)";
+  input.value += "waveform   " + waveform + " (sine, square, triangle, sawtooth)" + "\n";
+  input.value += "delay      " + delayWet + " (out of 1)";
 }
 
 function readInput(value) {
   const lines = value.split("\n");
 
   lines.forEach((line) => {
-    const words = line.trim().split(" ");
+    const words = line.trim().split(/\s+/);
     if (words.length > 0 && words[0].length > 0) {
       switch (words[0]) {
         case "edo":
