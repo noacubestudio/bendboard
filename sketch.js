@@ -76,17 +76,17 @@ window.setup = () => {
   const menuButton = document.getElementById("menuButton");
   const settingsDiv = document.getElementById("settingsDiv");
   const initialSettings = [
-    { name: 'edo', label: 'Equal divisions of octave', initialValue: scale.equalDivisions },
-    { name: 'scale', label: 'Scale ("off" / ratio chord)', initialValue: scale.scaleRatios.join(":") },
-    { name: 'mode', label: 'Mode of scale', initialValue: scale.mode },
-    { name: 'basefreq', label: 'Base frequency (Hz)', initialValue: scale.baseFrequency },
-    { name: 'octavecents', label: 'Octave size (cents)', initialValue: scale.octaveSizeCents },
-    { name: 'xoffset', label: 'Column offset (cents)', initialValue: layout.nextColumnOffsetCents },
-    { name: 'height', label: 'Vertical (px / cent)', initialValue: layout.centsToPixels },
-    { name: 'columnpx', label: 'Min. Column width (px)', initialValue: layout.idealWidth },
-    { name: 'snaprange', label: 'Snapping height (cents)', initialValue: scale.maxSnapToCents },
-    { name: 'waveform', label: 'Waveform', initialValue: waveform },
-    { name: 'delay', label: 'Delay Dry/Wet (0-1)', initialValue: delayWet },
+    { name: 'edo', label: 'Equal divisions of octave', initialValue: scale.equalDivisions, type: 'number', placeholder: '12, 14, 19, 31' },
+    { name: 'scale', label: 'Scale', initialValue: scale.scaleRatios.join(":"), type: 'text', placeholder: '12:17:24, 4:5:6:7, all' },
+    { name: 'mode', label: 'Mode of scale', initialValue: scale.mode, type: 'number', placeholder: '0, 1 ... last step of scale' },
+    { name: 'basefreq', label: 'Base frequency (Hz)', initialValue: scale.baseFrequency, type: 'number', placeholder: '25.50 (low A)' },
+    { name: 'octavecents', label: 'Octave size (cents)', initialValue: scale.octaveSizeCents, type: 'number', placeholder: '1200' },
+    { name: 'xoffset', label: 'Column offset (cents)', initialValue: layout.nextColumnOffsetCents, type: 'number', placeholder: '200 (a tone)' },
+    { name: 'height', label: 'Column height (px per cent)', initialValue: layout.centsToPixels, type: 'number', placeholder: '0.5, 0.75' },
+    { name: 'columnpx', label: 'Min. Column width (px)', initialValue: layout.idealWidth, type: 'number', placeholder: '50' },
+    { name: 'snaprange', label: 'Snapping height (cents)', initialValue: scale.maxSnapToCents, type: 'number', placeholder: '0, 30, 50' },
+    { name: 'waveform', label: 'Waveform', initialValue: waveform, type: 'text', placeholder: 'sine, square, triangle, sawtooth' },
+    { name: 'delay', label: 'Delay Dry/Wet', initialValue: delayWet, type: 'number', placeholder: '0, 0.7, 1.0' },
     // Add more objects as needed
   ];
 
@@ -166,7 +166,7 @@ function writeSettingsFromArray(settingsDiv, settingsArray) {
 
   // Generate labels and inputs
   settingsArray.forEach((inputObj) => {
-    const { name, label, initialValue } = inputObj;
+    const { name, label, initialValue, type, placeholder } = inputObj;
 
     const rowElement = document.createElement('div');
     rowElement.classList.add('input-row');
@@ -176,9 +176,10 @@ function writeSettingsFromArray(settingsDiv, settingsArray) {
     labelElement.classList.add('input-label');
 
     const inputElement = document.createElement('input');
-    inputElement.type = 'text';
+    inputElement.type = type;
     inputElement.name = name;
     inputElement.value = initialValue;
+    if (placeholder !== undefined) inputElement.placeholder = placeholder;
     inputElement.classList.add('input-field');
 
     rowElement.appendChild(labelElement);
