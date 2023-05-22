@@ -2,7 +2,7 @@ html, body {
   margin: 0;
   padding: 0;
   background-color: #050510;
-  font-family: monospace;
+  font-family: Roboto, sans-serif;
   font-size: 14px;
 }
 body {
@@ -57,28 +57,39 @@ button {
   font-weight: 600;
 }
 
-#settingsInput {
+#settingsDiv {
   display: none;
 
-  background-color: #33333390;
+  background-color: #33333370;
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 
-  border: none;
   border-radius: 6px;
-  color: #ffffff;
-
-  font-family: monospace;
-  white-space: pre-wrap;
-  font-size: 14px;
-
-  padding: 8px 15px 16px;
-  min-height: 100px;
-  width: 500px;
+  color: #ffffffa0;
 }
 
-#settingsInput span {
-  color: #FF6CAA;
+.input-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0px;
+}
+
+.input-label {
+  width: 200px;
+  /* text-align: right; */
+  margin-right: 10px;
+  font-size: 15px;
+}
+
+.input-field {
+  font-family: monospace;
+  border: none;
+  background-color: #333333B0;
+  color: #ffffff;
+  flex: 1;
+  width: 300px;
+  padding: 6px 10px;
+  font-size: 15px;
 }
 
 #bottom-container {

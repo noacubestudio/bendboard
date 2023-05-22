@@ -5,7 +5,9 @@ let mouseDown = false;
 let isMouse = false;
 let totalKbd = 0;
 let totalTouches = 0;
+
 let settingsFocused = false;
+let menuButtonFocused = false;
 
 
 // sound settings
@@ -72,59 +74,47 @@ window.setup = () => {
 
   // GUI and settings
   const menuButton = document.getElementById("menuButton");
-  const settingsInput = document.getElementById("settingsInput");
+  const settingsDiv = document.getElementById("settingsDiv");
+  const initialSettings = [
+    { name: 'edo', label: 'Equal divisions of octave', initialValue: scale.equalDivisions },
+    { name: 'scale', label: 'Scale ("off" / ratio chord)', initialValue: scale.scaleRatios.join(":") },
+    { name: 'mode', label: 'Mode of scale', initialValue: scale.mode },
+    { name: 'basefreq', label: 'Base frequency (Hz)', initialValue: scale.baseFrequency },
+    { name: 'octavecents', label: 'Octave size (cents)', initialValue: scale.octaveSizeCents },
+    { name: 'xoffset', label: 'Column offset (cents)', initialValue: layout.nextColumnOffsetCents },
+    { name: 'height', label: 'Vertical (px / cent)', initialValue: layout.centsToPixels },
+    { name: 'columnpx', label: 'Min. Column width (px)', initialValue: layout.idealWidth },
+    { name: 'snaprange', label: 'Snapping height (cents)', initialValue: scale.maxSnapToCents },
+    { name: 'waveform', label: 'Waveform', initialValue: waveform },
+    { name: 'delay', label: 'Delay Dry/Wet (0-1)', initialValue: delayWet },
+    // Add more objects as needed
+  ];
 
   // initial write to the settings input
-  settingsInput.innerHTML = getUpdatedSettingsHTML(settingsInput);
+  writeSettingsFromArray(settingsDiv, initialSettings);
 
   // show/hide the settings input
   menuButton.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    if (settingsInput.style.display !== 'block') {
-      settingsInput.style.display = 'block';
+    if (settingsDiv.style.display !== 'block') {
+      settingsDiv.style.display = 'block';
     } else {
-      settingsInput.style.display = 'none';
+      settingsDiv.style.display = 'none';
     }
   });
 
   // read the settings input if it changed and make changes
-  settingsInput.addEventListener("input", (event) => {
-    const editedText = event.target.innerHTML;
-    readInput(editedText);
+  settingsDiv.addEventListener("input", (event) => {
+    const target = event.target;
+    readSettingsInput(target.name, target.value);
   });
 
   // change focused state
-  settingsInput.addEventListener('focus', () => {settingsFocused = true;});
-  settingsInput.addEventListener('blur', () => {settingsFocused = false;});
-  settingsInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault(); // Prevent default behavior
-    }
-  });
-
-  // Copy and paste
-  // const copyButton = document.getElementById("copyButton");
-  // const pasteButton = document.getElementById("pasteButton");
-
-  // copyButton.addEventListener("click", (event) => {
-  //   event.preventDefault();
-  //   navigator.clipboard.writeText(settingsInput.value)
-  //   .catch((error) => {
-  //     console.error("Failed to copy text to clipboard:", error);
-  //   });
-  // });
-  // pasteButton.addEventListener("click", (event) => {
-  //   event.preventDefault();
-  //   navigator.clipboard.read()
-  //   .then((clipboardText) => {
-  //     settingsInput.value = clipboardText;
-  //   })
-  //   .catch((error) => {
-  //     console.error("Failed to read clipboard content:", error);
-  //   });
-  // });
-
+  menuButton.addEventListener('mouseenter', () => {if (isMouse) menuButtonFocused = true; window.draw();});
+  menuButton.addEventListener('mouseleave', () => {if (isMouse) menuButtonFocused = false; window.draw();});
+  settingsDiv.addEventListener('mouseenter', () => {if (isMouse) settingsFocused = true;});
+  settingsDiv.addEventListener('mouseleave', () => {if (isMouse) settingsFocused = false;});
 
   // initial settings from the default inputs
   setScale();
@@ -172,112 +162,104 @@ window.setup = () => {
   }
 }
 
-function getUpdatedSettingsHTML() {
-  let newLines = [
-    ["edo        ", scale.equalDivisions],
-    ["scale      ", scale.scaleRatios.join(":") + " (ratio or off)"],
-    ["mode       ", scale.mode],
-    [""],
-    ["base       ", scale.baseFrequency + " hz"],
-    ["octavesize ", scale.octaveSizeCents + " cents"],
-    ["xoffset    ", layout.nextColumnOffsetCents + " cents"],
-    ["height     ", layout.centsToPixels + " pixels / cent"],
-    ["columnpx   ", layout.idealWidth + " pixels (approx.)"],
-    ["snaprange  ", scale.maxSnapToCents + " cents"],
-    [""],
-    ["waveform   ", waveform + " (sine, square, triangle, sawtooth)"],
-    ["delay      ", delayWet + " (out of 1)"]
-  ];
+function writeSettingsFromArray(settingsDiv, settingsArray) {
 
-  const formattedLines = newLines.map(line => {
-    const [settingKey, ...settingVal] = line;
-    const formattedLine = `<span>${settingKey}</span>${settingVal.join('')}`;
-    return formattedLine;
+  // Generate labels and inputs
+  settingsArray.forEach((inputObj) => {
+    const { name, label, initialValue } = inputObj;
+
+    const rowElement = document.createElement('div');
+    rowElement.classList.add('input-row');
+
+    const labelElement = document.createElement('label');
+    labelElement.textContent = label;
+    labelElement.classList.add('input-label');
+
+    const inputElement = document.createElement('input');
+    inputElement.type = 'text';
+    inputElement.name = name;
+    inputElement.value = initialValue;
+    inputElement.classList.add('input-field');
+
+    rowElement.appendChild(labelElement);
+    rowElement.appendChild(inputElement);
+    settingsDiv.appendChild(rowElement);
   });
-
-  return formattedLines.join("<br>");
 }
 
-function readInput(innerHtml) {
-  const lines = innerHtml.split("<br>");
-  lines.pop();
+function readSettingsInput(name, value) {
+    if (value === undefined || value.length === 0) return;
 
-  lines.forEach((line) => {
-    const cleanedLine = line.replace(/<\/?span>/g, '').trim().toLowerCase(); // Remove <span> tags, leading and trailing spaces
-    const [firstWord, ...remainingWords] = cleanedLine.split(/\s+/); // Split at single or multiple spaces
-    if (firstWord !== undefined && firstWord.length > 0) {
-      switch (firstWord) {
-        case "edo":
-          const newEDO = Number(remainingWords[0]);
-          if (newEDO !== undefined && !isNaN(newEDO) && newEDO > 1) scale.equalDivisions = newEDO;
-          break;
-        case "scale":
-          if (remainingWords[0] === undefined || ["off", "false", "0", "none"].includes(remainingWords[0])) {
-            scale.scaleRatios = [];
-          } else {
-            const newScaleRatios = remainingWords[0].split(":");
-            if (newScaleRatios.length >= 2 && newScaleRatios.every((element) => (!isNaN(Number(element)) && element.length > 0))) {
-              scale.scaleRatios = newScaleRatios;
-            }
+    switch (name) {
+      case "edo":
+        const newEDO = Number(value);
+        if (!isNaN(newEDO) && newEDO > 1) scale.equalDivisions = newEDO;
+        break;
+      case "scale":
+        if (["off", "false", "0", "none"].includes(value)) {
+          scale.scaleRatios = [];
+        } else {
+          const newScaleRatios = value.split(":");
+          if (newScaleRatios.length >= 2 && newScaleRatios.every((element) => (!isNaN(Number(element)) && element.length > 0))) {
+            scale.scaleRatios = newScaleRatios;
           }
-          setScale();
-          break;
-        case "mode":
-          const newMode = Number(remainingWords[0]);
-          if (newMode !== undefined && !isNaN(newMode)) scale.mode = newMode;
-          setScale();
-          break;
-        case "base":
-          const newBase = Number(remainingWords[0]);
-          if (newBase !== undefined && !isNaN(newBase)) scale.baseFrequency = newBase;
-          break;
-        case "octavesize":
-          const newOctaveSize = Number(remainingWords[0]);
-          if (newOctaveSize !== undefined && !isNaN(newOctaveSize) && newOctaveSize > 100) scale.octaveSizeCents = newOctaveSize;
-          setScale();
-          resizeEverything(isMouse);
-          break;
-        case "xoffset":
-          const newOffsetCents = Number(remainingWords[0]);
-          if (newOffsetCents !== undefined && !isNaN(newOffsetCents) && newOffsetCents > 0) layout.nextColumnOffsetCents = newOffsetCents;
-          resizeEverything(isMouse);
-          break;
-        case "height":
-          const newCentsToPixels = Number(remainingWords[0]);
-          if (newCentsToPixels !== undefined && !isNaN(newCentsToPixels) && newCentsToPixels > 0) layout.centsToPixels = newCentsToPixels;
-          resizeEverything(isMouse);
-          break;
-        case "columnpx":
-          const newIdealWidth = Number(remainingWords[0]);
-          if (newIdealWidth !== undefined && !isNaN(newIdealWidth) && newIdealWidth > 10 && newIdealWidth < width) layout.idealWidth = newIdealWidth;
-          resizeEverything(isMouse);
-          break;
-        case "snaprange":
-          const newMaxSnap = Number(remainingWords[0]);
-          if (newMaxSnap !== undefined && !isNaN(newMaxSnap) && newMaxSnap >= 0) scale.maxSnapToCents = newMaxSnap;
-          break;
-        case "waveform":
-          const newWaveForm = remainingWords[0];
-          if (["sine", "square", "triangle","sawtooth"].includes(newWaveForm)) {
-            waveform = newWaveForm;
-            for (let i = 0; i < channels.length; i++) {
-              channels[i].synth.setType(waveform);
-            }
+        }
+        setScale();
+        break;
+      case "mode":
+        const newMode = Number(value);
+        if (!isNaN(newMode)) scale.mode = newMode;
+        setScale();
+        break;
+      case "basefreq":
+        const newBase = Number(value);
+        if (!isNaN(newBase)) scale.baseFrequency = newBase;
+        break;
+      case "octavecents":
+        const newOctaveSize = Number(value);
+        if (!isNaN(newOctaveSize) && newOctaveSize > 100) scale.octaveSizeCents = newOctaveSize;
+        setScale();
+        resizeEverything(isMouse);
+        break;
+      case "xoffset":
+        const newOffsetCents = Number(value);
+        if (!isNaN(newOffsetCents) && newOffsetCents > 0) layout.nextColumnOffsetCents = newOffsetCents;
+        resizeEverything(isMouse);
+        break;
+      case "height":
+        const newCentsToPixels = Number(value);
+        if (!isNaN(newCentsToPixels) && newCentsToPixels > 0) layout.centsToPixels = newCentsToPixels;
+        resizeEverything(isMouse);
+        break;
+      case "columnpx":
+        const newIdealWidth = Number(value);
+        if (!isNaN(newIdealWidth) && newIdealWidth > 10 && newIdealWidth < width) layout.idealWidth = newIdealWidth;
+        resizeEverything(isMouse);
+        break;
+      case "snaprange":
+        const newMaxSnap = Number(value);
+        if (!isNaN(newMaxSnap) && newMaxSnap >= 0) scale.maxSnapToCents = newMaxSnap;
+        break;
+      case "waveform":
+        const newWaveForm = value;
+        if (["sine", "square", "triangle","sawtooth"].includes(newWaveForm)) {
+          waveform = newWaveForm;
+          for (let i = 0; i < channels.length; i++) {
+            channels[i].synth.setType(waveform);
           }
-          break;
-        case "delay":
-          const newWet = Number(remainingWords[0]);
-          if (newWet !== undefined && !isNaN(newWet) && newWet > 0) {
-            delayWet = newWet;
-            delayFilter.drywet(delayWet);
-          }
-          break;
-        default:
-          print("Property " + firstWord + " was not found!")
-          break;
-      }
+        }
+        break;
+      case "delay":
+        const newWet = Number(value);
+        if (!isNaN(newWet) && newWet > 0) {
+          delayWet = newWet;
+          delayFilter.drywet(delayWet);
+        }
+        break;
+      default:
+        print("Property " + name + " was not found!")
+        break;
     }
-  });
 
   window.draw();
 }
@@ -355,22 +337,12 @@ window.draw = () => {
 
 function drawOctaveCircle() {
 
-  const radius = 36;
-
-  // // Calculate the distance between the mouse position and the circle center
-  // const distance = Math.sqrt((mouseX - 46) ** 2 + (mouseY - 46) ** 2);
-
-  // // Check if the distance is within the circle's radius
-  // if (distance !== undefined && distance <= radius) {
-  //   console.log('Mouse hit the circle');
-  // } else {
-  //   console.log('Mouse not hitting the circle');
-  // }
+  const radius = menuButtonFocused ? 38 : 36;
 
   push();
   translate(radius+10, radius+10);
 
-  strokeWeight(2);
+  strokeWeight(25);
   fill("#000000C0");
   stroke("#000");
   ellipse(0, 0, radius*2, radius*2);
@@ -378,6 +350,7 @@ function drawOctaveCircle() {
 
   // add simple grid, only if there is a scale as well
   // if there is no scale, then all notes are visible so this isn't needed
+  strokeWeight(2);
   if (scale.scaleRatios !== undefined && scale.scaleRatios.length > 0) {
     stroke("#333");
     let stepCents = 0;
@@ -390,8 +363,6 @@ function drawOctaveCircle() {
       line(0, 0, outerX, outerY);
     }
   }
-
-  strokeWeight(2);
 
   // scale
   scale.cents.forEach((cent) => {
@@ -419,10 +390,9 @@ function drawOctaveCircle() {
     }
   });
 
-  stroke("#FFFFFFB0");
-  strokeWeight(1);
-  line(radius + 5, -5, radius + 10, 0);
-  line(radius + 5,  5, radius + 10, 0);
+  noStroke();;
+  fill("#FFFFFFB0");
+  triangle(radius, -radius, radius, -radius+10, radius-10, -radius);
   pop();
 }
 
@@ -764,7 +734,7 @@ function handleTouchEnd(event) {
 }
 
 window.mouseDragged = () => {
-  if (settingsFocused) return;
+  if (settingsFocused || menuButtonFocused) return;
   if (!isMouse)
     return;
   if (outsideCanvas(mouseX, mouseY))
@@ -779,7 +749,7 @@ window.mouseDragged = () => {
 };
 
 window.mousePressed = () => {
-  if (settingsFocused) return;
+  if (settingsFocused || menuButtonFocused) return;
   userStartAudio();
   if (!isMouse) return
   if (outsideCanvas(mouseX, mouseY)) return;
