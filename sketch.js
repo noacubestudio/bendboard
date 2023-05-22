@@ -5,6 +5,7 @@ let mouseDown = false;
 let isMouse = false;
 let totalKbd = 0;
 let totalTouches = 0;
+let settingsFocused = false;
 
 
 // sound settings
@@ -74,7 +75,7 @@ window.setup = () => {
   const settingsInput = document.getElementById("settingsInput");
 
   // initial write to the settings input
-  writeToInput(settingsInput);
+  settingsInput.innerHTML = getUpdatedSettingsHTML(settingsInput);
 
   // show/hide the settings input
   menuButton.addEventListener("click", (event) => {
@@ -89,8 +90,17 @@ window.setup = () => {
 
   // read the settings input if it changed and make changes
   settingsInput.addEventListener("input", (event) => {
-    const editedText = event.target.value;
+    const editedText = event.target.innerHTML;
     readInput(editedText);
+  });
+
+  // change focused state
+  settingsInput.addEventListener('focus', () => {settingsFocused = true;});
+  settingsInput.addEventListener('blur', () => {settingsFocused = false;});
+  settingsInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault(); // Prevent default behavior
+    }
   });
 
   // Copy and paste
@@ -162,39 +172,50 @@ window.setup = () => {
   }
 }
 
-function writeToInput(input) {
-  input.value = "";
-  input.value += "edo        " + scale.equalDivisions + "\n";
-  input.value += "scale      " + scale.scaleRatios.join(":") + " (ratio or off)"+ "\n";
-  input.value += "mode       " + scale.mode + "\n";
-  input.value += "\n";
-  input.value += "base       " + scale.baseFrequency + " hz" + "\n";
-  input.value += "octavesize " + scale.octaveSizeCents + " cents" + "\n";
-  input.value += "xoffset    " + layout.nextColumnOffsetCents + " cents" + "\n";
-  input.value += "height     " + layout.centsToPixels + " pixels / cent" + "\n";
-  input.value += "columnpx   " + layout.idealWidth + " pixels (approx.)" + "\n";
-  input.value += "snaprange  " + scale.maxSnapToCents + " cents" + "\n";
-  input.value += "\n";
-  input.value += "waveform   " + waveform + " (sine, square, triangle, sawtooth)" + "\n";
-  input.value += "delay      " + delayWet + " (out of 1)";
+function getUpdatedSettingsHTML() {
+  let newLines = [
+    ["edo        ", scale.equalDivisions],
+    ["scale      ", scale.scaleRatios.join(":") + " (ratio or off)"],
+    ["mode       ", scale.mode],
+    [""],
+    ["base       ", scale.baseFrequency + " hz"],
+    ["octavesize ", scale.octaveSizeCents + " cents"],
+    ["xoffset    ", layout.nextColumnOffsetCents + " cents"],
+    ["height     ", layout.centsToPixels + " pixels / cent"],
+    ["columnpx   ", layout.idealWidth + " pixels (approx.)"],
+    ["snaprange  ", scale.maxSnapToCents + " cents"],
+    [""],
+    ["waveform   ", waveform + " (sine, square, triangle, sawtooth)"],
+    ["delay      ", delayWet + " (out of 1)"]
+  ];
+
+  const formattedLines = newLines.map(line => {
+    const [settingKey, ...settingVal] = line;
+    const formattedLine = `<span>${settingKey}</span>${settingVal.join('')}`;
+    return formattedLine;
+  });
+
+  return formattedLines.join("<br>");
 }
 
-function readInput(value) {
-  const lines = value.split("\n");
+function readInput(innerHtml) {
+  const lines = innerHtml.split("<br>");
+  lines.pop();
 
   lines.forEach((line) => {
-    const words = line.trim().split(/\s+/);
-    if (words.length > 0 && words[0].length > 0) {
-      switch (words[0]) {
+    const cleanedLine = line.replace(/<\/?span>/g, '').trim().toLowerCase(); // Remove <span> tags, leading and trailing spaces
+    const [firstWord, ...remainingWords] = cleanedLine.split(/\s+/); // Split at single or multiple spaces
+    if (firstWord !== undefined && firstWord.length > 0) {
+      switch (firstWord) {
         case "edo":
-          const newEDO = Number(words[1]);
+          const newEDO = Number(remainingWords[0]);
           if (newEDO !== undefined && !isNaN(newEDO) && newEDO > 1) scale.equalDivisions = newEDO;
           break;
         case "scale":
-          if (words[1] === undefined || ["off", "false", "0", "none"].includes(words[1])) {
+          if (remainingWords[0] === undefined || ["off", "false", "0", "none"].includes(remainingWords[0])) {
             scale.scaleRatios = [];
           } else {
-            const newScaleRatios = words[1].split(":");
+            const newScaleRatios = remainingWords[0].split(":");
             if (newScaleRatios.length >= 2 && newScaleRatios.every((element) => (!isNaN(Number(element)) && element.length > 0))) {
               scale.scaleRatios = newScaleRatios;
             }
@@ -202,41 +223,41 @@ function readInput(value) {
           setScale();
           break;
         case "mode":
-          const newMode = Number(words[1]);
+          const newMode = Number(remainingWords[0]);
           if (newMode !== undefined && !isNaN(newMode)) scale.mode = newMode;
           setScale();
           break;
         case "base":
-          const newBase = Number(words[1]);
+          const newBase = Number(remainingWords[0]);
           if (newBase !== undefined && !isNaN(newBase)) scale.baseFrequency = newBase;
           break;
         case "octavesize":
-          const newOctaveSize = Number(words[1]);
+          const newOctaveSize = Number(remainingWords[0]);
           if (newOctaveSize !== undefined && !isNaN(newOctaveSize) && newOctaveSize > 100) scale.octaveSizeCents = newOctaveSize;
           setScale();
           resizeEverything(isMouse);
           break;
         case "xoffset":
-          const newOffsetCents = Number(words[1]);
+          const newOffsetCents = Number(remainingWords[0]);
           if (newOffsetCents !== undefined && !isNaN(newOffsetCents) && newOffsetCents > 0) layout.nextColumnOffsetCents = newOffsetCents;
           resizeEverything(isMouse);
           break;
         case "height":
-          const newCentsToPixels = Number(words[1]);
+          const newCentsToPixels = Number(remainingWords[0]);
           if (newCentsToPixels !== undefined && !isNaN(newCentsToPixels) && newCentsToPixels > 0) layout.centsToPixels = newCentsToPixels;
           resizeEverything(isMouse);
           break;
         case "columnpx":
-          const newIdealWidth = Number(words[1]);
+          const newIdealWidth = Number(remainingWords[0]);
           if (newIdealWidth !== undefined && !isNaN(newIdealWidth) && newIdealWidth > 10 && newIdealWidth < width) layout.idealWidth = newIdealWidth;
           resizeEverything(isMouse);
           break;
         case "snaprange":
-          const newMaxSnap = Number(words[1]);
+          const newMaxSnap = Number(remainingWords[0]);
           if (newMaxSnap !== undefined && !isNaN(newMaxSnap) && newMaxSnap >= 0) scale.maxSnapToCents = newMaxSnap;
           break;
         case "waveform":
-          const newWaveForm = words[1];
+          const newWaveForm = remainingWords[0];
           if (["sine", "square", "triangle","sawtooth"].includes(newWaveForm)) {
             waveform = newWaveForm;
             for (let i = 0; i < channels.length; i++) {
@@ -245,14 +266,14 @@ function readInput(value) {
           }
           break;
         case "delay":
-          const newWet = Number(words[1]);
+          const newWet = Number(remainingWords[0]);
           if (newWet !== undefined && !isNaN(newWet) && newWet > 0) {
             delayWet = newWet;
             delayFilter.drywet(delayWet);
           }
           break;
         default:
-          print("Property " + words[0] + " was not found!")
+          print("Property " + firstWord + " was not found!")
           break;
       }
     }
@@ -424,7 +445,7 @@ function drawColumn(buffer) {
       buffer.line(buffer.width*0.3, yPos, buffer.width*0.7, yPos);
 
       if (cent === 0) {
-        const octave = 1 + octCents / scale.octaveSizeCents;
+        const octave = octCents / scale.octaveSizeCents;
         buffer.stroke("black");
         buffer.fill("white");
         buffer.text(octave, buffer.width*0.5, yPos);
@@ -727,6 +748,7 @@ function handleTouchEnd(event) {
 }
 
 window.mouseDragged = () => {
+  if (settingsFocused) return;
   if (!isMouse)
     return;
   if (outsideCanvas(mouseX, mouseY))
@@ -741,6 +763,7 @@ window.mouseDragged = () => {
 };
 
 window.mousePressed = () => {
+  if (settingsFocused) return;
   userStartAudio();
   if (!isMouse) return
   if (outsideCanvas(mouseX, mouseY)) return;
@@ -784,7 +807,7 @@ function handleMouseOver() {
 }
 
 window.keyPressed = () => {
-
+  if (settingsFocused) return;
   if (document.activeElement.type !== undefined) return
   if (!"1234567890".includes(key)) return
   userStartAudio();
@@ -802,7 +825,7 @@ window.keyPressed = () => {
 }
 
 window.keyReleased = () => {
-  
+  if (settingsFocused) return;
   if (document.activeElement.type !== undefined) return
   if (!"1234567890".includes(key)) return
   totalKbd--;

@@ -52,9 +52,18 @@ button {
   border: none;
   border-radius: 6px;
   color: #ffffff;
+
   font-family: monospace;
-  padding: 10px 14px;
+  white-space: pre-wrap;
   font-size: 14px;
+
+  padding: 8px 15px 16px;
+  min-height: 100px;
+  width: 500px;
+}
+
+#settingsInput span {
+  color: #FF6CAA;
 }
 
 #bottom-container {
