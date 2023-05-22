@@ -82,11 +82,11 @@ window.setup = () => {
     { name: 'basefreq', label: 'Base frequency (Hz)', initialValue: scale.baseFrequency, type: 'number', placeholder: '25.50 (low A)' },
     { name: 'octavecents', label: 'Octave size (cents)', initialValue: scale.octaveSizeCents, type: 'number', placeholder: '1200' },
     { name: 'xoffset', label: 'Column offset (cents)', initialValue: layout.nextColumnOffsetCents, type: 'number', placeholder: '200 (a tone)' },
-    { name: 'height', label: 'Column height (px per cent)', initialValue: layout.centsToPixels, type: 'number', placeholder: '0.5, 0.75' },
+    { name: 'height', label: 'Column height (px per cent)', initialValue: layout.centsToPixels, type: 'number', placeholder: '0.5, 0.75', step: '0.05' },
     { name: 'columnpx', label: 'Min. Column width (px)', initialValue: layout.idealWidth, type: 'number', placeholder: '50' },
-    { name: 'snaprange', label: 'Snapping height (cents)', initialValue: scale.maxSnapToCents, type: 'number', placeholder: '0, 30, 50' },
+    { name: 'snaprange', label: 'Snapping height (cents)', initialValue: scale.maxSnapToCents, type: 'number', placeholder: '0, 30, 50', step: '5' },
     { name: 'waveform', label: 'Waveform', initialValue: waveform, type: 'text', placeholder: 'sine, square, triangle, sawtooth' },
-    { name: 'delay', label: 'Delay Dry/Wet', initialValue: delayWet, type: 'number', placeholder: '0, 0.7, 1.0' },
+    { name: 'delay', label: 'Delay Dry/Wet', initialValue: delayWet, type: 'number', placeholder: '0, 0.7, 1.0', step: '0.1' },
     // Add more objects as needed
   ];
 
@@ -166,7 +166,7 @@ function writeSettingsFromArray(settingsDiv, settingsArray) {
 
   // Generate labels and inputs
   settingsArray.forEach((inputObj) => {
-    const { name, label, initialValue, type, placeholder } = inputObj;
+    const { name, label, initialValue, type, placeholder, step } = inputObj;
 
     const rowElement = document.createElement('div');
     rowElement.classList.add('input-row');
@@ -180,6 +180,7 @@ function writeSettingsFromArray(settingsDiv, settingsArray) {
     inputElement.name = name;
     inputElement.value = initialValue;
     if (placeholder !== undefined) inputElement.placeholder = placeholder;
+    if (step !== undefined) inputElement.step = step;
     inputElement.classList.add('input-field');
 
     rowElement.appendChild(labelElement);
