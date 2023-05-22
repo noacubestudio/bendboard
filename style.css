@@ -42,6 +42,21 @@ button {
   cursor: pointer;
 }
 
+#menuButton {
+  background-color: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  padding: none;
+  margin: 10px;
+  border-radius: 50%;
+  height: 72px;
+  width: 72px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: 600;
+}
+
 #settingsInput {
   display: none;
 

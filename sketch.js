@@ -354,14 +354,27 @@ window.draw = () => {
 }
 
 function drawOctaveCircle() {
-  push();
-  const radius = 36;
-  translate(width-radius-10, radius+10);
 
-  fill("#00000080")
-  stroke("#444")
-  ellipse(0, 0, radius*2, radius*2);
+  const radius = 36;
+
+  // // Calculate the distance between the mouse position and the circle center
+  // const distance = Math.sqrt((mouseX - 46) ** 2 + (mouseY - 46) ** 2);
+
+  // // Check if the distance is within the circle's radius
+  // if (distance !== undefined && distance <= radius) {
+  //   console.log('Mouse hit the circle');
+  // } else {
+  //   console.log('Mouse not hitting the circle');
+  // }
+
+  push();
+  translate(radius+10, radius+10);
+
   strokeWeight(2);
+  fill("#000000C0");
+  stroke("#000");
+  ellipse(0, 0, radius*2, radius*2);
+  
 
   // add simple grid, only if there is a scale as well
   // if there is no scale, then all notes are visible so this isn't needed
@@ -406,7 +419,10 @@ function drawOctaveCircle() {
     }
   });
 
-
+  stroke("#FFFFFFB0");
+  strokeWeight(1);
+  line(radius + 5, -5, radius + 10, 0);
+  line(radius + 5,  5, radius + 10, 0);
   pop();
 }
 
