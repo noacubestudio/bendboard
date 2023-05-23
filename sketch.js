@@ -168,8 +168,8 @@ function writeSettingsFromArray(settingsDiv, settingsArray) {
   settingsArray.forEach((inputObj) => {
     const { name, label, initialValue, type, placeholder, step } = inputObj;
 
-    const rowElement = document.createElement('div');
-    rowElement.classList.add('input-row');
+    const groupElement = document.createElement('div');
+    groupElement.classList.add('input-group');
 
     const labelElement = document.createElement('label');
     labelElement.textContent = label;
@@ -183,9 +183,9 @@ function writeSettingsFromArray(settingsDiv, settingsArray) {
     if (step !== undefined) inputElement.step = step;
     inputElement.classList.add('input-field');
 
-    rowElement.appendChild(labelElement);
-    rowElement.appendChild(inputElement);
-    settingsDiv.appendChild(rowElement);
+    groupElement.appendChild(labelElement);
+    groupElement.appendChild(inputElement);
+    settingsDiv.appendChild(groupElement);
   });
 }
 

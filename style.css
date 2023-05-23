@@ -15,12 +15,10 @@ canvas {
   position: absolute;
   display: flex;
   align-items: flex-start;
+  margin: 10px 0px;
 }
 #top-container * {
-  /* flex-basis: main-size;
-  flex-shrink: 0; */
   position: relative;
-  margin: 5px;
 }
 button {
   -webkit-touch-callout: none;
@@ -59,6 +57,8 @@ button {
 
 #settingsDiv {
   display: none;
+  max-height: 90%;
+  padding: 10px;
 
   background-color: #33333370;
   -webkit-backdrop-filter: blur(8px);
@@ -68,17 +68,15 @@ button {
   color: #ffffffa0;
 }
 
-.input-row {
+.input-group {
   display: flex;
-  align-items: center;
-  margin-bottom: 0px;
+  flex-direction: column;
 }
 
 .input-label {
-  width: 200px;
-  /* text-align: right; */
-  margin-right: 10px;
-  font-size: 15px;
+  font-size: 14px;
+  margin-top: 8px;
+  margin-bottom: 5px;
 }
 
 .input-field {
@@ -87,7 +85,7 @@ button {
   background-color: #333333B0;
   color: #ffffff;
   flex: 1;
-  width: 300px;
+  width: 350px;
   padding: 6px 10px;
   font-size: 15px;
 }
