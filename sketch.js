@@ -49,6 +49,10 @@ function ratioChordMode(chordArray, modeOffset) {
   modeOffset = modeOffset % (chordArray.length - 1);
   if (modeOffset <= 0) return chordArray;
 
+  if (chordArray[chordArray.length-1] !== chordArray[0]) {
+    chordArray.push(chordArray[0] * 2);
+  }
+
   const modeArray = [];
   chordArray.forEach((num, index) => {
     if (index <= modeOffset) {
@@ -382,6 +386,8 @@ function drawOctaveCircle() {
       const outerX = radius * cos(radians(angle));
       const outerY = radius * sin(radians(angle));
       line(0, 0, outerX, outerY);
+      strokeWeight(6);
+      line(outerX, outerY, outerX, outerY);
     }
   });
 
