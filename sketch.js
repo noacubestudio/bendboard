@@ -44,6 +44,8 @@ const scale = {
 }
 
 function ratioChordMode(chordArray, modeOffset) {
+  if (chordArray.length <= 1) return chordArray;
+
   modeOffset = modeOffset % (chordArray.length - 1);
   if (modeOffset <= 0) return chordArray;
 
@@ -59,13 +61,6 @@ function ratioChordMode(chordArray, modeOffset) {
   });
   return modeArray;
 }
-
-// function randomizeScale() {
-//   scale.equalDivisions = random([12, 14, 19, 24, 31]);
-//   scale.scaleRatios = random([[24, 27, 30, 32, 36, 40, 45, 48], [4, 5, 6, 7, 8]]);
-//   scale.mode = Math.floor(random(baseRatioChord.length+1));
-//   scale.cents = getScaleFromRatioChord(ratioChordMode(baseRatioChord, scale.mode));
-// }
 
 window.setup = () => {
   cnv = createCanvas(windowWidth, windowHeight).parent(container);
@@ -194,19 +189,21 @@ function readSettingsInput(name, value) {
 
     switch (name) {
       case "edo":
-        const newEDO = Number(value);
-        if (!isNaN(newEDO) && newEDO > 1) scale.equalDivisions = newEDO;
+        if (value > 0) scale.equalDivisions = value;
+        // regenerate all cents if no specific scale used
+        if (scale.scaleRatios.length === 0) setScale();
         break;
       case "scale":
-        if (["off", "false", "0", "none"].includes(value)) {
+        if (["all"].includes(value)) {
           scale.scaleRatios = [];
+          setScale();
         } else {
           const newScaleRatios = value.split(":");
-          if (newScaleRatios.length >= 2 && newScaleRatios.every((element) => (!isNaN(Number(element)) && element.length > 0))) {
-            scale.scaleRatios = newScaleRatios;
+          if (newScaleRatios.length >= 1 && newScaleRatios.every((element) => (Number(element) > 0))) {
+            scale.scaleRatios = newScaleRatios.map(Number);
+            setScale();
           }
         }
-        setScale();
         break;
       case "mode":
         const newMode = Number(value);
@@ -297,16 +294,12 @@ function resizeEverything(isMouse) {
 }
 
 function getScaleFromRatioChord(ratioChord) {
-  const scaleCents = [];
-  for (let i = 1; i < ratioChord.length; i++) {
-    const newCents = cents(ratioChord[0], ratioChord[i])
+  let scaleCents = [];
+  for (let i = 0; i < ratioChord.length; i++) {
+    const newCents = cents(ratioChord[0], ratioChord[i]) % scale.octaveSizeCents;
     scaleCents.push(newCents);
   }
-  if (scaleCents[scaleCents.length-1] === scale.octaveSizeCents) {
-    // remove last and add 0 at start
-    scaleCents.pop();
-    scaleCents.unshift(0);
-  }
+  scaleCents = [...new Set(scaleCents)].sort((a, b) => a - b);
   return scaleCents;
 }
 
