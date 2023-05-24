@@ -36,7 +36,7 @@ const scale = {
   baseFrequency: 27.50,
   maxSnapToCents: 30,
   equalDivisions: 12,
-  octaveSizeCents: 1200, // range used for scales and EDO
+  periodCents: 1200, // range used for scales and EDO
   scaleRatios: [24, 27, 30, 32, 36, 40, 45, 48],
   mode: 0,
   cents: [], // temp, gets set by scale ratios and mode
@@ -76,10 +76,10 @@ window.setup = () => {
   const settingsDiv = document.getElementById("settingsDiv");
   const initialSettings = [
     { name: 'edo', label: 'Equal divisions of octave', initialValue: scale.equalDivisions, type: 'number', placeholder: '12, 14, 19, 31' },
-    { name: 'scale', label: 'Scale', initialValue: scale.scaleRatios.join(":"), type: 'text', placeholder: '12:17:24, 4:5:6:7, all' },
-    { name: 'mode', label: 'Mode of scale', initialValue: scale.mode, type: 'number', placeholder: '0, 1 ... last step of scale' },
+    { name: 'scale', label: 'Just Intonation Scale', initialValue: scale.scaleRatios.join(":"), type: 'text', placeholder: '12:17:24, 4:5:6:7, all' },
+    { name: 'mode', label: 'Mode (starting step)', initialValue: scale.mode, type: 'number', placeholder: '0, 1 ... last step of scale' },
     { name: 'basefreq', label: 'Base frequency (Hz)', initialValue: scale.baseFrequency, type: 'number', placeholder: '25.50 (low A)' },
-    { name: 'octavecents', label: 'Octave size (cents)', initialValue: scale.octaveSizeCents, type: 'number', placeholder: '1200' },
+    { name: 'period', label: 'Repetition Interval (cents)', initialValue: scale.periodCents, type: 'number', placeholder: '1200' },
     { name: 'xoffset', label: 'Column offset (cents)', initialValue: layout.nextColumnOffsetCents, type: 'number', placeholder: '200 (a tone)' },
     { name: 'height', label: 'Column height (px per cent)', initialValue: layout.centsToPixels, type: 'number', placeholder: '0.5, 0.75', step: '0.05' },
     { name: 'columnpx', label: 'Min. Column width (px)', initialValue: layout.idealWidth, type: 'number', placeholder: '50' },
@@ -210,52 +210,43 @@ function readSettingsInput(name, value) {
         }
         break;
       case "mode":
-        const newMode = Number(value);
-        if (!isNaN(newMode)) scale.mode = newMode;
+        scale.mode = value;
         setScale();
         break;
       case "basefreq":
-        const newBase = Number(value);
-        if (!isNaN(newBase)) scale.baseFrequency = newBase;
+        scale.baseFrequency = value;
         break;
-      case "octavecents":
-        const newOctaveSize = Number(value);
-        if (!isNaN(newOctaveSize) && newOctaveSize > 100) scale.octaveSizeCents = newOctaveSize;
+      case "period":
+        if (value > 0) scale.periodCents = value;
         setScale();
         resizeEverything(isMouse);
         break;
       case "xoffset":
-        const newOffsetCents = Number(value);
-        if (!isNaN(newOffsetCents) && newOffsetCents > 0) layout.nextColumnOffsetCents = newOffsetCents;
+        layout.nextColumnOffsetCents = value;
         resizeEverything(isMouse);
         break;
       case "height":
-        const newCentsToPixels = Number(value);
-        if (!isNaN(newCentsToPixels) && newCentsToPixels > 0) layout.centsToPixels = newCentsToPixels;
+        if (value > 0) layout.centsToPixels = value;
         resizeEverything(isMouse);
         break;
       case "columnpx":
-        const newIdealWidth = Number(value);
-        if (!isNaN(newIdealWidth) && newIdealWidth > 10 && newIdealWidth < width) layout.idealWidth = newIdealWidth;
+        if (value > 10 && value < width) layout.idealWidth = value;
         resizeEverything(isMouse);
         break;
       case "snaprange":
-        const newMaxSnap = Number(value);
-        if (!isNaN(newMaxSnap) && newMaxSnap >= 0) scale.maxSnapToCents = newMaxSnap;
+        if (value >= 0) scale.maxSnapToCents = value;
         break;
       case "waveform":
-        const newWaveForm = value;
-        if (["sine", "square", "triangle","sawtooth"].includes(newWaveForm)) {
-          waveform = newWaveForm;
+        if (["sine", "square", "triangle","sawtooth"].includes(value)) {
+          waveform = value;
           for (let i = 0; i < channels.length; i++) {
             channels[i].synth.setType(waveform);
           }
         }
         break;
       case "delay":
-        const newWet = Number(value);
-        if (!isNaN(newWet) && newWet > 0) {
-          delayWet = newWet;
+        if (value > 0) {
+          delayWet = value;
           delayFilter.drywet(delayWet);
         }
         break;
@@ -271,7 +262,7 @@ function setScale() {
   if (scale.scaleRatios.length > 0) {
     scale.cents = getScaleFromRatioChord(ratioChordMode(scale.scaleRatios, scale.mode));
   } else {
-    scale.cents = getScaleCentsFromEDO(scale.equalDivisions, scale.octaveSizeCents);
+    scale.cents = getScaleCentsFromEDO(scale.equalDivisions, scale.periodCents);
   }
 }
 
@@ -300,7 +291,7 @@ function resizeEverything(isMouse) {
 function getScaleFromRatioChord(ratioChord) {
   let scaleCents = [];
   for (let i = 0; i < ratioChord.length; i++) {
-    const newCents = cents(ratioChord[0], ratioChord[i]) % scale.octaveSizeCents;
+    const newCents = cents(ratioChord[0], ratioChord[i]) % scale.periodCents;
     scaleCents.push(newCents);
   }
   scaleCents = [...new Set(scaleCents)].sort((a, b) => a - b);
@@ -353,9 +344,9 @@ function drawOctaveCircle() {
   if (scale.scaleRatios !== undefined && scale.scaleRatios.length > 0) {
     stroke("#333");
     let stepCents = 0;
-    while (stepCents < scale.octaveSizeCents) {
-      stepCents += scale.octaveSizeCents / scale.equalDivisions;
-      const percentOfOctave = stepCents / scale.octaveSizeCents;
+    while (stepCents < scale.periodCents) {
+      stepCents += scale.periodCents / scale.equalDivisions;
+      const percentOfOctave = stepCents / scale.periodCents;
       const angle = -90 + percentOfOctave * 360;
       const outerX = radius * cos(radians(angle));
       const outerY = radius * sin(radians(angle));
@@ -365,7 +356,7 @@ function drawOctaveCircle() {
 
   // scale
   scale.cents.forEach((cent) => {
-    const percentOfOctave = cent / scale.octaveSizeCents;
+    const percentOfOctave = cent / scale.periodCents;
     const hue = percentOfOctave * 360;
     const angle = -90 + percentOfOctave * 360;
     const outerX = radius * cos(radians(angle));
@@ -381,7 +372,7 @@ function drawOctaveCircle() {
   channels.forEach((channel) => {
     if (channel.source !== "off" && channel.properties.cents !== undefined) {
       // draw line for played cent
-      const percentOfOctave = (channel.properties.cents % scale.octaveSizeCents) / scale.octaveSizeCents;
+      const percentOfOctave = (channel.properties.cents % scale.periodCents) / scale.periodCents;
       const angle = -90 + percentOfOctave * 360;
       const outerX = radius * cos(radians(angle));
       const outerY = radius * sin(radians(angle));
@@ -413,17 +404,17 @@ function drawColumn(buffer) {
     buffer.stroke("#333");
     let gridCents = 0;
     while (gridCents < totalCents) {
-      gridCents += scale.octaveSizeCents / scale.equalDivisions;
+      gridCents += scale.periodCents / scale.equalDivisions;
       const yPos = map(gridCents, 0, totalCents, buffer.height, 0);
       buffer.line(buffer.width*0.05, yPos, buffer.width*0.95, yPos);
     }
   }
 
   // scale pitches
-  for (let octCents = 0; octCents < totalCents; octCents += scale.octaveSizeCents) {
+  for (let octCents = 0; octCents < totalCents; octCents += scale.periodCents) {
     scale.cents.forEach((cent) => {
       const combinedCent = octCents + cent;
-      const inOctaveHue = (cent / scale.octaveSizeCents) * 360;
+      const inOctaveHue = (cent / scale.periodCents) * 360;
       buffer.strokeWeight(1);
       buffer.stroke(chroma.oklch(0.6, 0.2, inOctaveHue).hex());
       const yPos = map(combinedCent, 0, totalCents, buffer.height, 0);
@@ -432,7 +423,7 @@ function drawColumn(buffer) {
       buffer.line(buffer.width*0.3, yPos, buffer.width*0.7, yPos);
 
       if (cent === 0) {
-        const octave = octCents / scale.octaveSizeCents;
+        const octave = octCents / scale.periodCents;
         buffer.stroke("black");
         buffer.fill("white");
         buffer.text(octave, buffer.width*0.5, yPos);
@@ -453,7 +444,7 @@ function drawColumn(buffer) {
       buffer.line(buffer.width*0.75, yPos, buffer.width*0.95, yPos);
       buffer.noStroke();
       buffer.fill("white");
-      buffer.text(Math.round(channel.properties.cents) % scale.octaveSizeCents, 0.5 * buffer.width, yPos - 15);
+      buffer.text(Math.round(channel.properties.cents) % scale.periodCents, 0.5 * buffer.width, yPos - 15);
     }
   });
 
@@ -494,7 +485,7 @@ function setFromScreenXY(channel, x, y, initType, id) {
 
 function setFromKbd(channel, position) {
   channel.properties.kbdstep = position - 1;
-  const channelCents = channel.properties.kbdstep * (scale.octaveSizeCents / scale.equalDivisions);
+  const channelCents = channel.properties.kbdstep * (scale.periodCents / scale.equalDivisions);
   channel.properties.cents = channelCents;
 
   // set freq
@@ -567,8 +558,8 @@ function setCentsFromScreenXY(channel, x, y) {
 }
 
 function snapToCents(cents) {
-  const playedInOctaveCents = cents % scale.octaveSizeCents;
-  const scaleOctaveCents = [...scale.cents, scale.octaveSizeCents];
+  const playedInOctaveCents = cents % scale.periodCents;
+  const scaleOctaveCents = [...scale.cents, scale.periodCents];
 
   let lastPitch = null;
   let snapToCentsInOctave = null;
