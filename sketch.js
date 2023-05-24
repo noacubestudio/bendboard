@@ -106,7 +106,7 @@ window.setup = () => {
   // read the settings input if it changed and make changes
   settingsDiv.addEventListener("input", (event) => {
     const target = event.target;
-    readSettingsInput(target.name, target.value);
+    readSettingsInput(target.name, target.value, target.type);
   });
 
   // change focused state
@@ -188,8 +188,9 @@ function writeSettingsFromArray(settingsDiv, settingsArray) {
   });
 }
 
-function readSettingsInput(name, value) {
+function readSettingsInput(name, value, type) {
     if (value === undefined || value.length === 0) return;
+    if (type === "number") value = Number(value);
 
     switch (name) {
       case "edo":
@@ -217,7 +218,7 @@ function readSettingsInput(name, value) {
         scale.baseFrequency = value;
         break;
       case "period":
-        if (value > 0) scale.periodCents = value;
+        if (value > 50) scale.periodCents = value;
         setScale();
         resizeEverything(isMouse);
         break;
@@ -298,10 +299,10 @@ function getScaleFromRatioChord(ratioChord) {
   return scaleCents;
 }
 
-function getScaleCentsFromEDO(edo, octaveSize) {
+function getScaleCentsFromEDO(edo, periodCents) {
   const scaleCents = [];
   for (let i = 0; i < edo; i++) {
-    scaleCents.push((octaveSize / edo) * i);
+    scaleCents.push((periodCents / edo) * i);
   }
   return scaleCents;
 }
@@ -576,7 +577,6 @@ function snapToCents(cents) {
     }
     lastPitch = currentPitch;
   }
-  //if (snapToCentsInOctave === scale.octaveSizeCents) snapToCentsInOctave = 0;
 
   let snapDistance = Math.round(playedInOctaveCents - snapToCentsInOctave);
   if (Math.abs(snapDistance) < scale.maxSnapToCents) {
