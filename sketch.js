@@ -25,8 +25,8 @@ const channels = [];
 
 const layout = {
   // start point
-  baseX: 200,
-  baseY: 700,
+  baseX: 0, // set based on screen dimensions
+  baseY: 0, // set based on screen dimensions
   // per column
   nextColumnOffsetCents: 200,
   // width and height
@@ -34,7 +34,7 @@ const layout = {
   centsToPixels: 0.5 //0.75
 }
 const scale = {
-  baseFrequency: 55.0,
+  baseFrequency: 110.0,
   maxSnapToCents: 30,
   equalDivisions: 12,
   periodCents: 1200, // range used for scales and EDO
@@ -130,7 +130,7 @@ window.setup = () => {
   settingsDiv.addEventListener('mouseleave', () => {if (isMouse) settingsFocused = false;});
 
   // initial settings from the default inputs
-  setScale();
+  setScaleCents();
 
   cnv.touchStarted(handleTouchStart);
   cnv.touchMoved(handleTouchMove);
@@ -210,30 +210,30 @@ function readSettingsInput(name, value, type) {
       case "edo":
         if (value > 0) scale.equalDivisions = value;
         // regenerate all cents if no specific scale used
-        if (scale.scaleRatios.length === 0) setScale();
+        if (scale.scaleRatios.length === 0) setScaleCents();
         break;
       case "scale":
         if (["all"].includes(value)) {
           scale.scaleRatios = [];
-          setScale();
+          setScaleCents();
         } else {
           const newScaleRatios = value.split(":");
           if (newScaleRatios.length >= 1 && newScaleRatios.every((element) => (Number(element) > 0))) {
             scale.scaleRatios = newScaleRatios.map(Number);
-            setScale();
+            setScaleCents();
           }
         }
         break;
       case "mode":
         scale.mode = value;
-        setScale();
+        setScaleCents();
         break;
       case "basefreq":
         scale.baseFrequency = value;
         break;
       case "period":
         if (value > 50) scale.periodCents = value;
-        setScale();
+        setScaleCents();
         resizeEverything(isMouse);
         break;
       case "xoffset":
@@ -273,7 +273,7 @@ function readSettingsInput(name, value, type) {
   window.draw();
 }
 
-function setScale() {
+function setScaleCents() {
   if (scale.scaleRatios.length > 0) {
     scale.cents = getScaleFromRatioChord(ratioChordMode(scale.scaleRatios, scale.mode));
   } else {
@@ -292,6 +292,10 @@ function resizeEverything(isMouse) {
   let newHeight = windowHeight;
   let newWidth = (isMouse) ? windowWidth - 16 : windowWidth;
   resizeCanvas(newWidth, newHeight, false);
+
+  // set the starting point (initial frequency) somewhere in this area
+  layout.baseX = Math.floor(constrain(newWidth / 2 - 200, 0, newWidth * 0.25));
+  layout.baseY = Math.floor(constrain(newHeight / 2, 0, newHeight)); // vertical center
 
   // based on layout settings, figure out how tall the buffer for the keyboard visual needs to be.
   // this height is the screen height plus space for all visible offsets.
