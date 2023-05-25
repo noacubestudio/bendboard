@@ -2,9 +2,14 @@ let cnv; let tallBuffer;
 const container = document.getElementById("canvas-container");
 
 let mouseDown = false;
-let isMouse = false;
+let usingMouse = !(window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0);
+
+let audioStarted = false;
+let webMidiLibraryEnabled = false;
+
 let totalKbd = 0;
 let totalTouches = 0;
+let totalMidi = 0;
 
 let settingsFocused = false;
 let menuButtonFocused = false;
@@ -43,6 +48,10 @@ const scale = {
   cents: [], // temp, gets set by scale ratios and mode
   //chordSteps: [-8, 0, 2, 4]
 }
+const midiSettings = {
+  deviceName: "",
+  baseOctave: 3
+}
 
 function ratioChordMode(chordArray, modeOffset) {
   if (chordArray.length <= 1) return chordArray;
@@ -70,7 +79,7 @@ function ratioChordMode(chordArray, modeOffset) {
 window.setup = () => {
   cnv = createCanvas(windowWidth, windowHeight).parent(container);
   tallBuffer = createGraphics(layout.columnWidth, windowHeight);
-  resizeEverything(isMouse);
+  resizeEverything(usingMouse);
 
   // GUI and settings
   const menuButton = document.getElementById("menuButton");
@@ -86,7 +95,9 @@ window.setup = () => {
     { name: 'columnpx', label: 'Column width (px)', initialValue: layout.columnWidth, type: 'number', placeholder: '50' },
     { name: 'snaprange', label: 'Snapping height (cents)', initialValue: scale.maxSnapToCents, type: 'number', placeholder: '0, 30, 50', step: '5' },
     { name: 'waveform', label: 'Waveform', initialValue: waveform, type: 'text', placeholder: 'sine, square, triangle, sawtooth' },
-    { name: 'delay', label: 'Delay Dry/Wet', initialValue: delayWet, type: 'number', placeholder: '0, 0.7, 1.0', step: '0.1' },
+    { name: 'delay', label: 'Delay dry/wet', initialValue: delayWet, type: 'number', placeholder: '0, 0.7, 1.0', step: '0.1' },
+    { name: 'midiname', label: 'MIDI IN • Search device name', initialValue: midiSettings.deviceName, type: 'text', placeholder: 'Check console (F12) for options' },
+    { name: 'midioctave', label: 'MIDI IN • Starting octave', initialValue: midiSettings.baseOctave, type: 'number', placeholder: '2, 3, 4' },
     // Add more objects as needed
   ];
 
@@ -120,14 +131,16 @@ window.setup = () => {
   // read the settings input if it changed and make changes
   settingsDiv.addEventListener("input", (event) => {
     const target = event.target;
-    readSettingsInput(target.name, target.value, target.type);
+    stopAllChannels("midi");
+    stopAllChannels("kbd");
+    readSettingsInput(target);
   });
 
   // change focused state
-  menuButton.addEventListener('mouseenter', () => {if (isMouse) menuButtonFocused = true; window.draw();});
-  menuButton.addEventListener('mouseleave', () => {if (isMouse) menuButtonFocused = false; window.draw();});
-  settingsDiv.addEventListener('mouseenter', () => {if (isMouse) settingsFocused = true;});
-  settingsDiv.addEventListener('mouseleave', () => {if (isMouse) settingsFocused = false;});
+  menuButton.addEventListener('mouseenter', () => {if (usingMouse) menuButtonFocused = true; window.draw();});
+  menuButton.addEventListener('mouseleave', () => {if (usingMouse) menuButtonFocused = false; window.draw();});
+  settingsDiv.addEventListener('mouseenter', () => {if (usingMouse) settingsFocused = true;});
+  settingsDiv.addEventListener('mouseleave', () => {if (usingMouse) settingsFocused = false;});
 
   // initial settings from the default inputs
   setScaleCents();
@@ -135,7 +148,6 @@ window.setup = () => {
   cnv.touchStarted(handleTouchStart);
   cnv.touchMoved(handleTouchMove);
   cnv.touchEnded(handleTouchEnd);
-  cnv.mouseOver(handleMouseOver);
 
   lpFilter = new p5.BandPass();
   lpFilter.res(1);
@@ -202,73 +214,83 @@ function writeSettingsFromArray(settingsDiv, settingsArray) {
   });
 }
 
-function readSettingsInput(name, value, type) {
-    if (value === undefined || value.length === 0) return;
-    if (type === "number") value = Number(value);
+function readSettingsInput(target) {
+  let {name, value, type} = target;
+  if (value === undefined || value.length === 0) return;
+  if (type === "number") value = Number(value);
 
-    switch (name) {
-      case "edo":
-        if (value > 0) scale.equalDivisions = value;
-        // regenerate all cents if no specific scale used
-        if (scale.scaleRatios.length === 0) setScaleCents();
-        break;
-      case "scale":
-        if (["all"].includes(value)) {
-          scale.scaleRatios = [];
+  switch (name) {
+    case "edo":
+      if (value > 0) scale.equalDivisions = value;
+      // regenerate all cents if no specific scale used
+      if (scale.scaleRatios.length === 0) setScaleCents();
+      break;
+    case "scale":
+      if (["all"].includes(value)) {
+        scale.scaleRatios = [];
+        setScaleCents();
+      } else {
+        // target.value = value.replace(/[, ]/g, ":");
+        // value = target.value;
+        const newScaleRatios = value.split(/[,. :]/);
+        if (newScaleRatios.length >= 1 && newScaleRatios.every((element) => (Number(element) > 0))) {
+          scale.scaleRatios = newScaleRatios.map(Number);
           setScaleCents();
-        } else {
-          const newScaleRatios = value.split(":");
-          if (newScaleRatios.length >= 1 && newScaleRatios.every((element) => (Number(element) > 0))) {
-            scale.scaleRatios = newScaleRatios.map(Number);
-            setScaleCents();
-          }
         }
-        break;
-      case "mode":
-        scale.mode = value;
-        setScaleCents();
-        break;
-      case "basefreq":
-        scale.baseFrequency = value;
-        break;
-      case "period":
-        if (value > 50) scale.periodCents = value;
-        setScaleCents();
-        resizeEverything(isMouse);
-        break;
-      case "xoffset":
-        layout.nextColumnOffsetCents = value;
-        resizeEverything(isMouse);
-        break;
-      case "height":
-        if (value > 0) layout.centsToPixels = value;
-        resizeEverything(isMouse);
-        break;
-      case "columnpx":
-        if (value > 10 && value < width) layout.columnWidth = value;
-        resizeEverything(isMouse);
-        break;
-      case "snaprange":
-        if (value >= 0) scale.maxSnapToCents = value;
-        break;
-      case "waveform":
-        if (["sine", "square", "triangle","sawtooth"].includes(value)) {
-          waveform = value;
-          for (let i = 0; i < channels.length; i++) {
-            channels[i].synth.setType(waveform);
-          }
+      }
+      break;
+    case "mode":
+      scale.mode = value;
+      setScaleCents();
+      break;
+    case "basefreq":
+      scale.baseFrequency = value;
+      break;
+    case "period":
+      if (value > 50) scale.periodCents = value;
+      setScaleCents();
+      resizeEverything(usingMouse);
+      break;
+    case "xoffset":
+      layout.nextColumnOffsetCents = value;
+      resizeEverything(usingMouse);
+      break;
+    case "height":
+      if (value > 0) layout.centsToPixels = value;
+      resizeEverything(usingMouse);
+      break;
+    case "columnpx":
+      if (value > 10 && value < width) layout.columnWidth = value;
+      resizeEverything(usingMouse);
+      break;
+    case "snaprange":
+      if (value >= 0) scale.maxSnapToCents = value;
+      break;
+    case "waveform":
+      if (["sine", "square", "triangle","sawtooth"].includes(value)) {
+        waveform = value;
+        for (let i = 0; i < channels.length; i++) {
+          channels[i].synth.setType(waveform);
         }
-        break;
-      case "delay":
-        if (value > 0) {
-          delayWet = value;
-          delayFilter.drywet(delayWet);
-        }
-        break;
-      default:
-        print("Property " + name + " was not found!")
-        break;
-    }
+      }
+      break;
+    case "delay":
+      if (value > 0) {
+        delayWet = value;
+        delayFilter.drywet(delayWet);
+      }
+      break;
+    case "midiname":
+      midiSettings.deviceName = value;
+      initNewMidiInput(midiSettings.deviceName);
+      break;
+    case "midioctave":
+      midiSettings.baseOctave = value;
+      break;
+    default:
+      console.log("Property " + name + " was not found!")
+      break;
+  }
 
   window.draw();
 }
@@ -282,7 +304,7 @@ function setScaleCents() {
 }
 
 window.windowResized = () => {
-  resizeEverything(isMouse);
+  resizeEverything(usingMouse);
   window.draw();
 }
 
@@ -324,7 +346,7 @@ function getScaleFromRatioChord(ratioChord) {
 function getScaleCentsFromEDO(edo, periodCents) {
   const scaleCents = [];
   const stepSize = 1200 / edo;
-  const stepCount = Math.ceil(periodCents / stepSize);
+  const stepCount = Math.floor(periodCents / stepSize);
   for (let i = 0; i < stepCount; i++) {
     scaleCents.push(stepSize * i);
   }
@@ -346,11 +368,19 @@ window.draw = () => {
   // });
   // text(scaleText, 14, 14);
 
-  // fill("white")
-  // text(scale.cents, 100, 24);
+  fill("white");
+  textAlign(RIGHT, CENTER);
+  //text(`${scale.cents.join("  ")}`, width - 20, height - 20);
+  //text(`${JSON.stringify(countChannelTypes())}`, width - 20, height - 20);
 
-  // stroke("red")
-  // line(layout.baseX, layout.baseY, layout.baseX + layout.columnWidth, layout.baseY)
+  //overlay if audio not started
+  if (!audioStarted) {
+    fill("#00000090");
+    rect(0, 0, width, height);
+    fill("white");
+    textAlign(CENTER, CENTER);
+    text("Click/ Tap to start", width/2, height/2);
+  }
 }
 
 function drawOctaveCircle() {
@@ -444,7 +474,6 @@ function drawColumn(buffer) {
     periodCents.push(r * scale.periodCents);
   }
   const basePeriodIndex = visibleRepetitionsDown;
-  // print(visibleRepetitionsDown, visibleRepetitionsUp, periodCents)
 
   // for every repetition range...
   periodCents.forEach((pc, index) => {
@@ -582,6 +611,25 @@ function setFromKbd(channel, keyIndex) {
   channel.synth.freq(frequency(scale.baseFrequency, channelCents));
 }
 
+function setFromMidi(channel, midiOffset) {
+
+  channel.properties.midiOffset = midiOffset;
+
+  const setCentsFromOffset = (offset) => {
+    const repetitionIndex = Math.floor(offset / scale.cents.length);
+    const scaleIndex = offset - repetitionIndex * scale.cents.length;
+    const scaleStepCents = scale.cents[scaleIndex];
+    return repetitionIndex * scale.periodCents + scaleStepCents;
+  }
+
+  // set new cents
+  const channelCents = setCentsFromOffset(midiOffset);
+  channel.properties.cents = channelCents;
+
+  // set freq
+  channel.synth.freq(frequency(scale.baseFrequency, channelCents));
+}
+
 function setCentsFromScreenXY(channel, x, y) {
   // make position relative to the base note, at which cents === 0.
   x -= layout.baseX;
@@ -706,11 +754,29 @@ function firstChannel(source) {
   }
 }
 
+function countChannelTypes() {
+  const count = {};
+  channels.forEach((c) => {
+    if (count[c.source] === undefined) {
+      count[c.source] = 0;
+    }
+    count[c.source]++;
+  });
+  return count;
+}
+
 function exactChannel(source, id) {
   if (source === "kbd") {
     for (let i = 0; i < channels.length; i++) {
       const channel = channels[i];
       if (channel.source === source && channel.properties.kbdstep === id) {
+        return i;
+      }
+    }
+  } else if (source === "midi") {
+    for (let i = 0; i < channels.length; i++) {
+      const channel = channels[i];
+      if (channel.source === source && channel.properties.midiOffset === id) {
         return i;
       }
     }
@@ -749,12 +815,6 @@ function changeSnapping() {
   scale.maxSnapToCents = scale.maxSnapToCents % 60;
 }
 
-function countInputs() {
-  let total = totalKbd + totalTouches;
-  if (mouseDown) total++;
-  return total;
-}
-
 // distance between two frequencies in cents
 function cents(a, b) {
   if (b === a) return 0;
@@ -771,8 +831,7 @@ function easeInCirc(x) {
 }
 
 function handleTouchStart(event) {
-  if (event.touches !== undefined) totalTouches = event.touches.length;
-  userStartAudio();
+  if (initializeAudioStep()) return;
   event.preventDefault();
 
   event.changedTouches.forEach((touch) => {
@@ -805,7 +864,6 @@ function handleTouchMove(event) {
 }
 
 function handleTouchEnd(event) {
-  if (event.touches !== undefined) totalTouches = event.touches.length;
   event.changedTouches.forEach((touch) => {
     const id = touch.identifier;
     //const x = touch.clientX; const y = touch.clientY - 60;
@@ -816,13 +874,9 @@ function handleTouchEnd(event) {
       channel.properties = {};
       channel.synth.stop();
 
-      // stop all
-      if (countInputs() === 0) {
-        channels.forEach((channel) => {
-          channel.properties = {};
-          channel.source = "off";
-          channel.synth.stop();
-        })
+      // if there are playing touches still, but none on the screen, stop all
+      if (countChannelTypes().touch > 0 && event.touches.length === 0) {
+        stopAllChannels("touch");
       }
       
       window.draw();
@@ -832,7 +886,7 @@ function handleTouchEnd(event) {
 
 window.mouseDragged = () => {
   if (settingsFocused || menuButtonFocused) return;
-  if (!isMouse)
+  if (!usingMouse)
     return;
   if (outsideCanvas(mouseX, mouseY))
     return;
@@ -846,9 +900,9 @@ window.mouseDragged = () => {
 };
 
 window.mousePressed = () => {
+  if (initializeAudioStep()) return;
   if (settingsFocused || menuButtonFocused) return;
-  userStartAudio();
-  if (!isMouse) return
+  if (!usingMouse) return
   if (outsideCanvas(mouseX, mouseY)) return;
   
   mouseDown = true;
@@ -862,7 +916,7 @@ window.mousePressed = () => {
 }
 
 window.mouseReleased = () => {
-  if (!isMouse) return
+  if (!usingMouse) return
   mouseDown = false;
   
   const channel = channels[firstChannel("mouse")];
@@ -870,34 +924,49 @@ window.mouseReleased = () => {
     channel.source = "off";
     channel.properties = {};
     channel.synth.stop();
-    if (countInputs() === 0) {
-      channels.forEach((channel) => {
-        channel.properties = {}
-        channel.source = "off";
-        channel.synth.stop();
-      });
-    }
     
     window.draw();
   }
 }
 
-function handleMouseOver() {
-  if (!isMouse) {
-    isMouse = true;
-    resizeEverything(isMouse);
+function initializeAudioStep() {
+  if (!audioStarted) {
+    userStartAudio();
+    audioStarted = true;
+    window.draw();
+    return true;
   }
+  return false;
 }
+
+function stopAllChannels(type) {
+  if (type === undefined) {
+    // just stop all
+    channels.forEach((channel) => {
+      channel.properties = {};
+      channel.source = "off";
+      channel.synth.stop();
+    });
+  } else {
+    channels.forEach((channel) => {
+      if (channel.source === type) {
+        channel.properties = {};
+        channel.source = "off";
+        channel.synth.stop();
+      }
+    });
+  } 
+} 
 
 
 window.keyPressed = () => {
+  if (initializeAudioStep()) return;
   if (settingsFocused) return;
   if (document.activeElement.type !== undefined) return
 
   const keyIndex = "1234567890".indexOf(key);
   if (keyIndex === -1) return;
 
-  userStartAudio();
   totalKbd++;
 
   const channel = channels[firstChannel("off")];
@@ -926,4 +995,105 @@ window.keyReleased = () => {
     window.draw();
   }
   return false; // prevent any default behavior
+}
+
+
+
+// Enable WEBMIDI.js and trigger the onEnabled() function when ready
+// Check if WebMidi is supported in the browser
+WebMidi.enable().then(webMidiEnabled).catch(err => console.log(err));
+
+
+// Function triggered when WEBMIDI.js is ready
+function webMidiEnabled() {
+
+  webMidiLibraryEnabled = true;
+
+  WebMidi.addListener("connected", (e) => {
+    console.log("WebMidi connected:", e);
+  });
+
+  WebMidi.addListener("disconnected", (e) => {
+    console.log("WebMidi disconnected:", e);
+  });
+
+  WebMidi.addListener("portschanged", (e) => {
+    console.log("WebMidi ports changed:", e);
+  });
+
+  // Display available MIDI input devices
+  if (WebMidi.inputs.length < 1) {
+    console.log("No midi device detected")
+  } else {
+    WebMidi.inputs.forEach((device, index) => {
+      console.log(`Midi device ${index}: ${device.name}`);
+    });
+  }
+}
+
+function initNewMidiInput(deviceName) {
+
+  if (webMidiLibraryEnabled === false) return;
+
+  // get the device. if it's not avaliable, return
+  const midiInputDevice = WebMidi.getInputByName(deviceName);
+
+  if (midiInputDevice === undefined) {
+    console.log("No midi device with name \"" + deviceName + "\" was found.")
+    return;
+  } else {
+    console.log("Connected with device: " + midiInputDevice.name)
+  }
+
+  midiInputDevice.addListener("noteon", e => {
+    totalMidi++;
+
+    const whiteNoteNumberFromBase = calculateNoteNumberFromName(e.note.name, e.note.octave);
+
+    const channel = channels[firstChannel("off")];
+    if (channel !== undefined) {
+      setFromMidi(channel, whiteNoteNumberFromBase);
+      channel.source = "midi";
+      channel.synth.start();
+      window.draw();
+    }
+  });
+
+  midiInputDevice.addListener("noteoff", e => {
+    totalMidi--;
+
+    const whiteNoteNumberFromBase = calculateNoteNumberFromName(e.note.name, e.note.octave);
+
+    const channel = channels[exactChannel("midi", whiteNoteNumberFromBase)];
+    if (channel !== undefined) {
+      channel.source = "off";
+      channel.properties = {};
+      channel.synth.stop();
+      window.draw();
+    }
+    return false; // prevent any default behavior
+  });
+
+}
+
+// Function to calculate the number value for a MIDI note
+function calculateNoteNumberFromName(note, octave) {
+  const noteMappings = {
+    "C": 0,
+    "D": 1,
+    "E": 2,
+    "F": 3,
+    "G": 4,
+    "A": 5,
+    "B": 6
+  };
+  
+  if (note in noteMappings) {
+    const noteNumber = noteMappings[note];
+    const octaveDistance = octave - midiSettings.baseOctave;
+    const totalDistance = noteNumber + (octaveDistance * 7);
+    return totalDistance;
+  }
+  
+  return null; // Return null for invalid notes or black keys
 }
