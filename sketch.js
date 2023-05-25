@@ -104,6 +104,19 @@ window.setup = () => {
     }
   });
 
+  // escape key also works
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (settingsDiv.style.display !== 'block') {
+        settingsDiv.style.display = 'block';
+      } else {
+        settingsDiv.style.display = 'none';
+        settingsFocused = false;
+      }
+    }
+  });
+
   // read the settings input if it changed and make changes
   settingsDiv.addEventListener("input", (event) => {
     const target = event.target;
@@ -445,7 +458,7 @@ function drawColumn(buffer) {
     buffer.stroke("#333");
     buffer.strokeWeight(1);
 
-    const stepCount = Math.ceil(scale.periodCents / (1200 / scale.equalDivisions));
+    const stepCount = Math.ceil(periodCents / (1200 / scale.equalDivisions));
     for (let c = 0; c < stepCount; c++) {
       const centsAboveRep = (c / scale.equalDivisions) * 1200;
       const pixelsY = columnCentsToPixels(repStartCents + centsAboveRep);
@@ -547,9 +560,18 @@ function setFromScreenXY(channel, x, y, initType, id) {
   if (initType !== undefined) initChannel(channel, initType, id);
 }
 
-function setFromKbd(channel, position) {
-  channel.properties.kbdstep = position - 1;
-  const channelCents = channel.properties.kbdstep * (scale.periodCents / scale.equalDivisions);
+function setFromKbd(channel, keyIndex) {
+
+  channel.properties.kbdstep = keyIndex;
+
+  const setCentsFromScaleIndex = (index) => {
+    const repetitionIndex = Math.floor(index / scale.cents.length);
+    const scaleStepCents = scale.cents[index % scale.cents.length];
+    return repetitionIndex * scale.periodCents + scaleStepCents;
+  }
+
+  // set new cents
+  const channelCents = setCentsFromScaleIndex(keyIndex);
   channel.properties.cents = channelCents;
 
   // set freq
@@ -684,7 +706,7 @@ function exactChannel(source, id) {
   if (source === "kbd") {
     for (let i = 0; i < channels.length; i++) {
       const channel = channels[i];
-      if (channel.source === source && channel.properties.kbdsteo === id -1) {
+      if (channel.source === source && channel.properties.kbdstep === id) {
         return i;
       }
     }
@@ -863,18 +885,20 @@ function handleMouseOver() {
   }
 }
 
+
 window.keyPressed = () => {
   if (settingsFocused) return;
   if (document.activeElement.type !== undefined) return
-  if (!"1234567890".includes(key)) return
+
+  const keyIndex = "1234567890".indexOf(key);
+  if (keyIndex === -1) return;
+
   userStartAudio();
   totalKbd++;
-  
-  const position = (key === "0") ? 10 : Number(key);
 
   const channel = channels[firstChannel("off")];
   if (channel !== undefined) {
-    setFromKbd(channel, position);
+    setFromKbd(channel, keyIndex);
     channel.source = "kbd";
     channel.synth.start();
     window.draw();
@@ -884,11 +908,13 @@ window.keyPressed = () => {
 window.keyReleased = () => {
   if (settingsFocused) return;
   if (document.activeElement.type !== undefined) return
-  if (!"1234567890".includes(key)) return
-  totalKbd--;
-  const position = (key === "0") ? 10 : Number(key);
 
-  const channel = channels[exactChannel("kbd", position)];
+  const keyIndex = "1234567890".indexOf(key);
+  if (keyIndex === -1) return;
+
+  totalKbd--;
+
+  const channel = channels[exactChannel("kbd", keyIndex)];
   if (channel !== undefined) {
     channel.source = "off";
     channel.properties = {};
