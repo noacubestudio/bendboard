@@ -417,9 +417,7 @@ function drawColumn(buffer) {
   const columnCentsToPixels = (cents) => {return map(cents, 0, totalCents, buffer.height, 0)};
 
   // mark base spot
-  buffer.fill("#111");
-  buffer.noStroke();
-  buffer.ellipse(buffer.width * 0.5, columnCentsToPixels(centsUnderBase),buffer.width);
+
 
   // get list of period starting positions
   const periodCents = [];
@@ -457,6 +455,14 @@ function drawColumn(buffer) {
 
   function drawRatioScale(repStartCents, periodCents, repetitionIndex) {
     scale.cents.forEach((centsAboveRep) => {
+      //background circle
+      if (centsAboveRep === 0) {
+        buffer.fill((repetitionIndex === 0) ? "#FFFFFF18" : "#FFFFFF10");
+        buffer.noStroke();
+        buffer.ellipse(buffer.width * 0.5, columnCentsToPixels(repStartCents), buffer.width);
+      }
+
+      // draw colored line
       const inOctaveHue = (centsAboveRep / periodCents) * 360;
       buffer.strokeWeight(1);
       buffer.stroke(chroma.oklch(0.6, 0.2, inOctaveHue).hex());
@@ -465,6 +471,7 @@ function drawColumn(buffer) {
       buffer.strokeWeight(6);
       buffer.line(buffer.width*0.3, pixelsY, buffer.width*0.7, pixelsY);
 
+      // octave number on top
       if (centsAboveRep === 0) {
         buffer.stroke("black");
         buffer.fill("white");
