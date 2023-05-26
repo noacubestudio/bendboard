@@ -54,29 +54,6 @@ const midiSettings = {
   baseOctave: 3
 }
 
-function ratioChordMode(chordArray, modeOffset) {
-  if (chordArray.length <= 1) return chordArray;
-
-  modeOffset = modeOffset % (chordArray.length - 1);
-  if (modeOffset <= 0) return chordArray;
-
-  if (chordArray[chordArray.length-1] !== chordArray[0]) {
-    chordArray.push(chordArray[0] * 2);
-  }
-
-  const modeArray = [];
-  chordArray.forEach((num, index) => {
-    if (index <= modeOffset) {
-      // these numbers will be doubled
-      modeArray[index + (chordArray.length-1) - modeOffset] = num * 2;
-    } 
-    if (index >= modeOffset) {
-      modeArray[index-modeOffset] = num;
-    }
-  });
-  return modeArray;
-}
-
 window.setup = () => {
   cnv = createCanvas(windowWidth, windowHeight).parent(container);
   tallBuffer = createGraphics(layout.columnWidth, windowHeight);
@@ -310,9 +287,7 @@ function readSettingsInput(target) {
 
 function updateScaleProperties() {
   // first set the array of sorted fractions
-  scale.sortedFractions = sortedFractionArrsFromRatioChord(scale.scaleRatios);
-
-  // now apply the mode, WIP
+  scale.sortedFractions = sortedFractionArrsFromRatioChord(scale.scaleRatios, scale.mode);
 
   // then set the array of cents
   if (scale.sortedFractions.length > 0) {
@@ -320,6 +295,54 @@ function updateScaleProperties() {
   } else {
     scale.cents = getCentsArrFromEDO(scale.equalDivisions, scale.periodRatio);
   }
+}
+
+function sortedFractionArrsFromRatioChord(ratioChordArr, modeNum) {
+  // nothing to do with empty array
+  if (ratioChordArr.length === 0) return [];
+
+  // get ratio chord like 4:5:6 and return fractions like 4/4 5/4 6/4
+  const denominator = ratioChordArr[0];
+  const fractionsArr = ratioChordArr.map((numerator) => [numerator, denominator])
+  
+  // use the mode number to essentially change which pitch is 1/1
+  const maxModeNum = fractionsArr.length-1; // this should realistically take the actual number of unique notes and the right order too...
+  modeNum = wrapNumber(modeNum, 0, maxModeNum);
+  const transposedArr = transposeScale(fractionsArr, fractionsArr[modeNum]);
+  const modeMovedArr = moveUnderNextPeriod(transposedArr, modeNum, scale.periodRatio);
+
+  // reduce to period (e.g. all fractions under 2/1) and simplify the fractions
+  const reducedArr = modeMovedArr.map((fraction) => getPeriodReducedFractionArray(fraction[0], fraction[1]));
+  const simplifiedArr = reducedArr.map((fraction) => getSimplifiedFractionArray(fraction[0], fraction[1]));
+
+  // sort fractions and remove duplicates
+  simplifiedArr.sort((a, b) => a[0] * b[1] - b[0] * a[1]);
+  const uniqueArr = simplifiedArr.filter((fraction, index) =>
+    index === simplifiedArr.findIndex((f) => f[0] === fraction[0] && f[1] === fraction[1])
+  );
+
+  return uniqueArr;
+}
+
+function transposeScale(scale, newRoot) {
+  const currentRoot = scale[0];
+  const interval = [newRoot[0] * currentRoot[1], newRoot[1] * currentRoot[0]];
+
+  return scale.map((fraction) => [
+    fraction[0] * interval[1],
+    fraction[1] * interval[0]
+  ]);
+}
+
+function moveUnderNextPeriod(scaleArr, modeNum, periodFraction) {
+  // take as many elements as "mode" from the start of the scale array and add them to the end in that order
+  // while also making the fractions relative to the end, not start of the array.
+  // to do this just multiply by the period
+  const movedElements = scaleArr.slice(0, modeNum).map((fraction) => [
+    fraction[0] * periodFraction[0],
+    fraction[1] * periodFraction[1]
+  ]);
+  return scaleArr.concat(movedElements);
 }
 
 window.windowResized = () => {
@@ -372,31 +395,6 @@ function getCentsArrFromEDO(edo, periodRatio) {
     scaleCents.push(stepSize * i);
   }
   return scaleCents;
-}
-
-function sortedFractionArrsFromRatioChord(ratioChordArr) {
-  if (ratioChordArr.length === 0) return [];
-
-  const resultArr = [] // [[1, 1]];
-
-  // simplify and reduce
-  for (let i = 0; i < ratioChordArr.length; i++) {
-    const denominator = ratioChordArr[0];
-    const numerator = ratioChordArr[i];
-    const [reducedNumerator, reducedDenominator] = getPeriodReducedFractionArray(numerator, denominator);
-    const [simplifiedNumerator, simplifiedDenominator] = getSimplifiedFractionArray(reducedNumerator, reducedDenominator);
-    resultArr.push([simplifiedNumerator, simplifiedDenominator]);
-  }
-
-  // sort
-  resultArr.sort((a, b) => a[0] * b[1] - b[0] * a[1]);
-
-  // remove duplicates
-  const uniqueFractions = resultArr.filter((fraction, index) =>
-    index === resultArr.findIndex((f) => f[0] === fraction[0] && f[1] === fraction[1])
-  );
-
-  return uniqueFractions;
 }
 
 window.draw = () => {
@@ -885,6 +883,12 @@ function frequency(base, cents) {
 
 function easeInCirc(x) {
   return 1 - Math.sqrt(1 - Math.pow(x, 2));
+}
+
+function wrapNumber(num, min, max) {
+  const range = max - min + 1;
+  const wrappedNum = ((num - min) % range + range) % range + min;
+  return wrappedNum;
 }
 
 function getPeriodReducedFractionArray(numerator, denominator) {
