@@ -42,11 +42,12 @@ const scale = {
   baseFrequency: 110.0,
   maxSnapToCents: 30,
   equalDivisions: 12,
-  periodCents: 1200, // range used for scales and EDO
+  periodRatio: [2, 1], // range used for scales and EDO
   scaleRatios: [24, 27, 30, 32, 36, 40, 45, 48],
   mode: 0,
-  cents: [], // temp, gets set by scale ratios and mode
-  //chordSteps: [-8, 0, 2, 4]
+  // set on scale updates
+  sortedFractions: [], 
+  cents: []
 }
 const midiSettings = {
   deviceName: "",
@@ -89,7 +90,7 @@ window.setup = () => {
     { name: 'scale', label: 'Just Intonation Scale', initialValue: scale.scaleRatios.join(":"), type: 'text', placeholder: '12:17:24, 4:5:6:7, all' },
     { name: 'mode', label: 'Mode (starting step)', initialValue: scale.mode, type: 'number', placeholder: '0, 1 ... last step of scale' },
     { name: 'basefreq', label: 'Base frequency (Hz)', initialValue: scale.baseFrequency, type: 'number', placeholder: '25.50 (low A)' },
-    { name: 'period', label: 'Repetition Interval (cents)', initialValue: scale.periodCents, type: 'number', placeholder: '1200' },
+    { name: 'period', label: 'Repetition Interval (ratio)', initialValue: scale.periodRatio.join("/"), type: 'text', placeholder: '2/1' },
     { name: 'xoffset', label: 'Column offset (cents)', initialValue: layout.nextColumnOffsetCents, type: 'number', placeholder: '200 (a tone)' },
     { name: 'height', label: 'Column height (px per cent)', initialValue: layout.centsToPixels, type: 'number', placeholder: '0.5, 0.75', step: '0.05' },
     { name: 'columnpx', label: 'Column width (px)', initialValue: layout.columnWidth, type: 'number', placeholder: '50' },
@@ -143,7 +144,7 @@ window.setup = () => {
   settingsDiv.addEventListener('mouseleave', () => {if (usingMouse) settingsFocused = false;});
 
   // initial settings from the default inputs
-  setScaleCents();
+  updateScaleProperties();
 
   cnv.touchStarted(handleTouchStart);
   cnv.touchMoved(handleTouchMove);
@@ -223,33 +224,45 @@ function readSettingsInput(target) {
     case "edo":
       if (value > 0) scale.equalDivisions = value;
       // regenerate all cents if no specific scale used
-      if (scale.scaleRatios.length === 0) setScaleCents();
+      if (scale.scaleRatios.length === 0) updateScaleProperties();
       break;
     case "scale":
       if (["all"].includes(value)) {
         scale.scaleRatios = [];
-        setScaleCents();
+        updateScaleProperties();
       } else {
         // target.value = value.replace(/[, ]/g, ":");
         // value = target.value;
-        const newScaleRatios = value.split(/[,. :]/);
+        const newScaleRatios = value.split(/[,.: ]+/);
         if (newScaleRatios.length >= 1 && newScaleRatios.every((element) => (Number(element) > 0))) {
           scale.scaleRatios = newScaleRatios.map(Number);
-          setScaleCents();
+          updateScaleProperties();
         }
       }
       break;
     case "mode":
       scale.mode = value;
-      setScaleCents();
+      updateScaleProperties();
       break;
     case "basefreq":
       scale.baseFrequency = value;
       break;
     case "period":
-      if (value > 50) scale.periodCents = value;
-      setScaleCents();
-      resizeEverything(usingMouse);
+      // is fraction
+      const foundFractionArr = value.match(/(\d+)\s*\/\s*(\d+)/);
+      if (foundFractionArr) {
+        if (foundFractionArr[1] / foundFractionArr[2] > 1) {
+          scale.periodRatio = [Number(foundFractionArr[1]), Number(foundFractionArr[2])];
+          updateScaleProperties();
+          resizeEverything(usingMouse);
+        }
+      } else if (!isNaN(value)) {
+        if (Number(value) > 1) {
+          scale.periodRatio = [Number(value), 1];
+          updateScaleProperties();
+          resizeEverything(usingMouse);
+        }
+      }
       break;
     case "xoffset":
       layout.nextColumnOffsetCents = value;
@@ -295,11 +308,17 @@ function readSettingsInput(target) {
   window.draw();
 }
 
-function setScaleCents() {
-  if (scale.scaleRatios.length > 0) {
-    scale.cents = getScaleFromRatioChord(ratioChordMode([...scale.scaleRatios], scale.mode));
+function updateScaleProperties() {
+  // first set the array of sorted fractions
+  scale.sortedFractions = sortedFractionArrsFromRatioChord(scale.scaleRatios);
+
+  // now apply the mode, WIP
+
+  // then set the array of cents
+  if (scale.sortedFractions.length > 0) {
+    scale.cents = getCentsArrFromSortedFractions(scale.sortedFractions);
   } else {
-    scale.cents = getScaleCentsFromEDO(scale.equalDivisions, scale.periodCents);
+    scale.cents = getCentsArrFromEDO(scale.equalDivisions, scale.periodRatio);
   }
 }
 
@@ -333,24 +352,51 @@ function resizeEverything(isMouse) {
   tallBuffer.resizeCanvas(layout.columnWidth, totalHeight, false);
 }
 
-function getScaleFromRatioChord(ratioChord) {
+function getCentsArrFromSortedFractions(sortedFractionsArr) {
   let scaleCents = [];
-  for (let i = 0; i < ratioChord.length; i++) {
-    const newCents = cents(ratioChord[0], ratioChord[i]) % scale.periodCents;
+  for (let i = 0; i < sortedFractionsArr.length; i++) {
+    const fraction = sortedFractionsArr[i]
+    const newCents = ratioToCents(fraction[1], fraction[0]);
     scaleCents.push(newCents);
   }
-  scaleCents = [...new Set(scaleCents)].sort((a, b) => a - b);
+  //scaleCents = [...new Set(scaleCents)].sort((a, b) => a - b);
   return scaleCents;
 }
 
-function getScaleCentsFromEDO(edo, periodCents) {
+function getCentsArrFromEDO(edo, periodRatio) {
   const scaleCents = [];
   const stepSize = 1200 / edo;
+  const periodCents = ratioToCents(periodRatio[1], periodRatio[0]);
   const stepCount = Math.floor(periodCents / stepSize);
   for (let i = 0; i < stepCount; i++) {
     scaleCents.push(stepSize * i);
   }
   return scaleCents;
+}
+
+function sortedFractionArrsFromRatioChord(ratioChordArr) {
+  if (ratioChordArr.length === 0) return [];
+
+  const resultArr = [] // [[1, 1]];
+
+  // simplify and reduce
+  for (let i = 0; i < ratioChordArr.length; i++) {
+    const denominator = ratioChordArr[0];
+    const numerator = ratioChordArr[i];
+    const [reducedNumerator, reducedDenominator] = getPeriodReducedFractionArray(numerator, denominator);
+    const [simplifiedNumerator, simplifiedDenominator] = getSimplifiedFractionArray(reducedNumerator, reducedDenominator);
+    resultArr.push([simplifiedNumerator, simplifiedDenominator]);
+  }
+
+  // sort
+  resultArr.sort((a, b) => a[0] * b[1] - b[0] * a[1]);
+
+  // remove duplicates
+  const uniqueFractions = resultArr.filter((fraction, index) =>
+    index === resultArr.findIndex((f) => f[0] === fraction[0] && f[1] === fraction[1])
+  );
+
+  return uniqueFractions;
 }
 
 window.draw = () => {
@@ -362,36 +408,13 @@ window.draw = () => {
 
   drawOctaveCircle();
 
-  // let scaleText = scale.equalDivisions + " edo, scale chord";
-  // scale.scaleRatios.forEach((num, index) => {
-  //   scaleText += (index > 0 ? ":" : " ") + num;
-  // });
-  // text(scaleText, 14, 14);
-
   fill("white");
   textAlign(CENTER, CENTER);
 
-  const simplifiedScaleChord = [];
-
-  if (scale.scaleRatios.length > 0) {
-
-    simplifiedScaleChord.push([1, 1]);
-
-    for (let i = 1; i < scale.scaleRatios.length; i++) {
-      const denominator = scale.scaleRatios[0];
-      const numerator = scale.scaleRatios[i];
-      const [reducedNumerator, reducedDenominator] = getPeriodReducedFractionArray(numerator, denominator);
-      const [simplifiedNumerator, simplifiedDenominator] = getSimplifiedFractionArray(reducedNumerator, reducedDenominator);
-      simplifiedScaleChord.push([simplifiedNumerator, simplifiedDenominator]);
-    }
-
-    simplifiedScaleChord.sort((a, b) => a[0] * b[1] - b[0] * a[1]);
-  }
-
-  simplifiedScaleChord.forEach((ratioArr, index) => {
+  scale.sortedFractions.forEach((ratioArr, index) => {
     const ratioString = ratioArr[0] + "/" + ratioArr[1];
     const cent = scale.cents[index % scale.cents.length];
-    const percentOfOctave = cent / scale.periodCents;
+    const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
     const hue = percentOfOctave * 360;
     fill(chroma.oklch(0.8, 0.2, hue).hex()); // Set line color
     stroke("black");
@@ -430,10 +453,10 @@ function drawOctaveCircle() {
   strokeWeight(2);
   if (scale.scaleRatios.length > 0) {
     stroke("#333");
-    const stepCount = Math.ceil(scale.periodCents / (1200 / scale.equalDivisions));
+    const stepCount = Math.ceil(ratioToCents(scale.periodRatio[1], scale.periodRatio[0]) / (1200 / scale.equalDivisions));
     for (let c = 0; c < stepCount; c++) {
       const stepCents = c * (1200 / scale.equalDivisions);
-      const percentOfPeriod = stepCents / scale.periodCents;
+      const percentOfPeriod = stepCents / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
       const angle = -90 + percentOfPeriod * 360;
       const outerX = radius * cos(radians(angle));
       const outerY = radius * sin(radians(angle));
@@ -443,7 +466,7 @@ function drawOctaveCircle() {
 
   // scale
   scale.cents.forEach((cent) => {
-    const percentOfOctave = cent / scale.periodCents;
+    const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
     const hue = percentOfOctave * 360;
     const angle = -90 + percentOfOctave * 360;
     const outerX = radius * cos(radians(angle));
@@ -458,7 +481,8 @@ function drawOctaveCircle() {
   channels.forEach((channel) => {
     if (channel.source !== "off" && channel.properties.cents !== undefined) {
       // draw line for played cent
-      const percentOfOctave = (channel.properties.cents % scale.periodCents) / scale.periodCents;
+      const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+      const percentOfOctave = (channel.properties.cents % periodCents) / periodCents;
       const angle = -90 + percentOfOctave * 360;
       const outerX = radius * cos(radians(angle));
       const outerY = radius * sin(radians(angle));
@@ -496,21 +520,22 @@ function drawColumn(buffer) {
 
 
   // get list of period starting positions
-  const periodCents = [];
-  const visibleRepetitionsDown = Math.ceil(centsUnderBase / scale.periodCents);
-  const visibleRepetitionsUp = Math.ceil(centsAboveBase / scale.periodCents);
+  const periodCentsArr = [];
+  const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+  const visibleRepetitionsDown = Math.ceil(centsUnderBase / periodCents);
+  const visibleRepetitionsUp = Math.ceil(centsAboveBase / periodCents);
   for (let r = -visibleRepetitionsDown; r < visibleRepetitionsUp; r++) {
-    periodCents.push(r * scale.periodCents);
+    periodCentsArr.push(r * periodCents);
   }
   const basePeriodIndex = visibleRepetitionsDown;
 
   // for every repetition range...
-  periodCents.forEach((pc, index) => {
+  periodCentsArr.forEach((pc, index) => {
     const centsFromBottom = pc + centsUnderBase;
 
-    drawEDOGrid(centsFromBottom, scale.periodCents);
+    drawEDOGrid(centsFromBottom, periodCents);
 
-    drawRatioScale(centsFromBottom, scale.periodCents, index - basePeriodIndex);
+    drawRatioScale(centsFromBottom, periodCents, index - basePeriodIndex);
   });
 
   function drawEDOGrid(repStartCents, periodCents) {
@@ -568,7 +593,7 @@ function drawColumn(buffer) {
       buffer.line(buffer.width*0.75, yPos, buffer.width*0.95, yPos);
       buffer.noStroke();
       buffer.fill("white");
-      buffer.text(Math.round(channel.properties.cents) % scale.periodCents, 0.5 * buffer.width, yPos - 15);
+      buffer.text(cleanRound(channel.properties.cents % periodCents), 0.5 * buffer.width, yPos - 15);
     }
   });
 }
@@ -629,7 +654,8 @@ function setFromKbd(channel, keyIndex) {
   const setCentsFromScaleIndex = (index) => {
     const repetitionIndex = Math.floor(index / scale.cents.length);
     const scaleStepCents = scale.cents[index % scale.cents.length];
-    return repetitionIndex * scale.periodCents + scaleStepCents;
+    const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+    return repetitionIndex * periodCents + scaleStepCents;
   }
 
   // set new cents
@@ -648,7 +674,8 @@ function setFromMidi(channel, midiOffset) {
     const repetitionIndex = Math.floor(offset / scale.cents.length);
     const scaleIndex = offset - repetitionIndex * scale.cents.length;
     const scaleStepCents = scale.cents[scaleIndex];
-    return repetitionIndex * scale.periodCents + scaleStepCents;
+    const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+    return repetitionIndex * periodCents + scaleStepCents;
   }
 
   // set new cents
@@ -740,9 +767,10 @@ function updateSnappingForChannel(channel, cents) {
   }
 }
 
-function getCompletelySnappedCents(cents) {
-  const playedInOctaveCents = cents % scale.periodCents;
-  const scaleOctaveCents = [...scale.cents, scale.periodCents];
+function getCompletelySnappedCents(c) {
+  const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+  const playedInOctaveCents = c % periodCents;
+  const scaleOctaveCents = [...scale.cents, periodCents];
 
   let lastPitch = null;
   let snapToCentsInOctave = null;
@@ -762,8 +790,8 @@ function getCompletelySnappedCents(cents) {
 
   let snapDistance = Math.round(playedInOctaveCents - snapToCentsInOctave);
   if (Math.abs(snapDistance) < scale.maxSnapToCents) {
-    cents -= snapDistance;
-    return cents;
+    c -= snapDistance;
+    return c;
   }
   // nothing to snap to
   return undefined;
@@ -845,7 +873,7 @@ function changeSnapping() {
 }
 
 // distance between two frequencies in cents
-function cents(a, b) {
+function ratioToCents(a, b) {
   if (b === a) return 0;
   return 1200 * Math.log2(b / a);
 }
@@ -860,17 +888,20 @@ function easeInCirc(x) {
 }
 
 function getPeriodReducedFractionArray(numerator, denominator) {
-
-  let c = cents(denominator, numerator);
+  let c = ratioToCents(denominator, numerator);
+  const [pNumerator, pDenominator] = scale.periodRatio;
+  const p = ratioToCents(pDenominator, pNumerator);
 
   // Multiply or divide numerator and denominator by powers of two
-  while (c < 0 || c > scale.periodCents) {
+  while (c < 0 || c >= p) {
     if (c < 0) {
-      numerator *= 2;
+      numerator *= pNumerator;
+      denominator *= pDenominator;
     } else {
-      denominator *= 2;
+      numerator *= pDenominator;
+      denominator *= pNumerator;
     }
-    c = cents(denominator, numerator);
+    c = ratioToCents(denominator, numerator);
   }
 
   return [numerator, denominator];
@@ -884,6 +915,14 @@ function getSimplifiedFractionArray(numerator, denominator) {
     c = a % b; a = b; b = c;
   }
   return [numerator / a, denominator / a];
+}
+
+function cleanRound(number) {
+  if (Number.isInteger(number)) {
+    return number; // No decimal places, return the original number as-is
+  } else {
+    return number.toFixed(1); // Round to one decimal place
+  }
 }
 
 
