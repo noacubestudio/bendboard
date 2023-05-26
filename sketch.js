@@ -297,7 +297,7 @@ function readSettingsInput(target) {
 
 function setScaleCents() {
   if (scale.scaleRatios.length > 0) {
-    scale.cents = getScaleFromRatioChord(ratioChordMode(scale.scaleRatios, scale.mode));
+    scale.cents = getScaleFromRatioChord(ratioChordMode([...scale.scaleRatios], scale.mode));
   } else {
     scale.cents = getScaleCentsFromEDO(scale.equalDivisions, scale.periodCents);
   }
@@ -369,8 +369,28 @@ window.draw = () => {
   // text(scaleText, 14, 14);
 
   fill("white");
-  textAlign(RIGHT, CENTER);
-  //text(`${scale.cents.join("  ")}`, width - 20, height - 20);
+  textAlign(CENTER, CENTER);
+
+  const simplifiedScaleChord = [];
+  for (let i = 1; i < scale.scaleRatios.length; i++) {
+    const denominator = scale.scaleRatios[0];
+    const numerator = scale.scaleRatios[i];
+    const [reducedNumerator, reducedDenominator] = getReducedFractionArray(numerator, denominator);
+    simplifiedScaleChord.push(reducedNumerator + "/" + reducedDenominator);
+  }
+
+  simplifiedScaleChord.unshift("1/1");
+  simplifiedScaleChord.forEach((ratioString, index) => {
+    const cent = scale.cents[index % scale.cents.length];
+    const percentOfOctave = cent / scale.periodCents;
+    const hue = percentOfOctave * 360;
+    fill(chroma.oklch(0.8, 0.2, hue).hex()); // Set line color
+    stroke("black");
+    strokeWeight(8);
+    text(`${ratioString}`, 46,  100 + index * 20);
+  })
+  strokeWeight(1);
+
   //text(`${JSON.stringify(countChannelTypes())}`, width - 20, height - 20);
 
   //overlay if audio not started
@@ -829,6 +849,18 @@ function frequency(base, cents) {
 function easeInCirc(x) {
   return 1 - Math.sqrt(1 - Math.pow(x, 2));
 }
+
+function getReducedFractionArray(numerator, denominator) {
+  let a = numerator;
+  let b = denominator;
+  let c;
+  while (b) {
+    c = a % b; a = b; b = c;
+  }
+  return [numerator / a, denominator / a];
+}
+
+
 
 function handleTouchStart(event) {
   if (initializeAudioStep()) return;
