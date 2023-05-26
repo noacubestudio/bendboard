@@ -372,15 +372,24 @@ window.draw = () => {
   textAlign(CENTER, CENTER);
 
   const simplifiedScaleChord = [];
-  for (let i = 1; i < scale.scaleRatios.length; i++) {
-    const denominator = scale.scaleRatios[0];
-    const numerator = scale.scaleRatios[i];
-    const [reducedNumerator, reducedDenominator] = getReducedFractionArray(numerator, denominator);
-    simplifiedScaleChord.push(reducedNumerator + "/" + reducedDenominator);
+
+  if (scale.scaleRatios.length > 0) {
+
+    simplifiedScaleChord.push([1, 1]);
+
+    for (let i = 1; i < scale.scaleRatios.length; i++) {
+      const denominator = scale.scaleRatios[0];
+      const numerator = scale.scaleRatios[i];
+      const [reducedNumerator, reducedDenominator] = getPeriodReducedFractionArray(numerator, denominator);
+      const [simplifiedNumerator, simplifiedDenominator] = getSimplifiedFractionArray(reducedNumerator, reducedDenominator);
+      simplifiedScaleChord.push([simplifiedNumerator, simplifiedDenominator]);
+    }
+
+    simplifiedScaleChord.sort((a, b) => a[0] * b[1] - b[0] * a[1]);
   }
 
-  simplifiedScaleChord.unshift("1/1");
-  simplifiedScaleChord.forEach((ratioString, index) => {
+  simplifiedScaleChord.forEach((ratioArr, index) => {
+    const ratioString = ratioArr[0] + "/" + ratioArr[1];
     const cent = scale.cents[index % scale.cents.length];
     const percentOfOctave = cent / scale.periodCents;
     const hue = percentOfOctave * 360;
@@ -850,7 +859,24 @@ function easeInCirc(x) {
   return 1 - Math.sqrt(1 - Math.pow(x, 2));
 }
 
-function getReducedFractionArray(numerator, denominator) {
+function getPeriodReducedFractionArray(numerator, denominator) {
+
+  let c = cents(denominator, numerator);
+
+  // Multiply or divide numerator and denominator by powers of two
+  while (c < 0 || c > scale.periodCents) {
+    if (c < 0) {
+      numerator *= 2;
+    } else {
+      denominator *= 2;
+    }
+    c = cents(denominator, numerator);
+  }
+
+  return [numerator, denominator];
+}
+
+function getSimplifiedFractionArray(numerator, denominator) {
   let a = numerator;
   let b = denominator;
   let c;
