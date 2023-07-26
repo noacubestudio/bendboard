@@ -684,6 +684,12 @@ function setFromMidi(channel, midiOffset) {
   channel.synth.freq(frequency(scale.baseFrequency, channelCents));
 }
 
+function adjustScaleRatioFromMidiCC(scaleDeg, value) {
+  if (scaleDeg == undefined || scaleDeg < 0) return;
+  scale.scaleRatios[scaleDeg] = value;
+  updateScaleProperties();
+}
+
 function setCentsFromScreenXY(channel, x, y) {
   // make position relative to the base note, at which cents === 0.
   x -= layout.baseX;
@@ -1158,6 +1164,28 @@ function initNewMidiInput(deviceName) {
       channel.synth.start();
       window.draw();
     }
+  });
+
+  midiInputDevice.addListener("controlchange", e => {
+    // Handle the CC messages here
+    const ccNumber = e.controller.number;
+    const ccValue = e.value;
+
+    // temp effect
+    if (ccNumber === 1) return;
+    // mine is broken...
+
+    // assume they start at 31, 41 and so on
+    const targetScaleDeg = ccNumber % 10 - 1;
+
+    // console.log(ccNumber, ":", ccValue);
+    adjustScaleRatioFromMidiCC(targetScaleDeg, Math.floor(ccValue*127));
+    
+    // if note played via keyboard or midi, update channel
+    //const changedStepChannel = cha
+    // WIP: CHANGE PLAYING NOTES TO MATCH?
+    
+    window.draw();
   });
 
   midiInputDevice.addListener("noteoff", e => {
