@@ -1,11 +1,11 @@
 //enableWebGL2(window.p5)
 
-let cnv;
+let cnv; let density = 1;
 const container = document.getElementById("canvas-container");
 let boldMonoFont;
 
 let mouseDown = false;
-let usingMouse = !(window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0);
+let usingMouse = false; //!(window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0);
 
 let audioStarted = false;
 let webMidiLibraryEnabled = false;
@@ -68,12 +68,14 @@ window.preload = () => {
 window.setup = () => {
   cnv = createCanvas(windowWidth, windowHeight, WEBGL).parent(container);
 
-  // disables scaling for retina screens which can create inconsistent scaling between displays
-  //pixelDensity(1);
-  let density = displayDensity();
-  pixelDensity(density);
 
+  // disables scaling for retina screens which can create inconsistent scaling between displays
+  // HIGHER RESOLUTION OPTION:
+  density = displayDensity();
+
+  pixelDensity(density);
   resizeEverything(usingMouse);
+  print("Display density:", density, "mouse/desktop mode:", usingMouse);
 
   // GUI and settings
   const menuButton = document.getElementById("menuButton");
@@ -366,8 +368,8 @@ window.windowResized = () => {
 function resizeEverything(isMouse) {
   // set new dimensions, resize canvas, but don't draw yet.
   // on PC, leave some room for the scrollbar.
-  let newHeight = windowHeight;
-  let newWidth = (isMouse) ? windowWidth - 16 : windowWidth;
+  let newHeight = (isMouse) ? windowHeight - 6 : windowHeight;
+  let newWidth = (isMouse) ? windowWidth - 6 : windowWidth;
   resizeCanvas(newWidth, newHeight, false);
 
   // set the starting point (initial frequency) somewhere in this area
@@ -398,6 +400,8 @@ function getCentsArrFromEDO(edo, periodRatio) {
 }
 
 window.draw = () => {
+
+  if (window._renderer == undefined) return;
 
   background("#000");
   noStroke();
@@ -454,7 +458,7 @@ function drawShader() {
   const vecTo01 = ([x, y]) => [xTo01(x), 1 - yTo01(y)];
 
   // base, permanent
-  keyboardShader.setUniform("u_resolution", [width * displayDensity(), height * displayDensity()]);
+  keyboardShader.setUniform("u_resolution", [width * density, height * density]);
   keyboardShader.setUniform("u_pixelHeight", yTo01(1));
 
   // layout
@@ -1066,6 +1070,16 @@ function handleTouchEnd(event) {
       window.draw();
     }
   })
+}
+
+window.mouseMoved = () => {
+  if (!usingMouse) {
+    usingMouse = true;
+    resizeEverything(usingMouse);
+    window.draw();
+    print("mouse move detected: mouse/desktop mode:", usingMouse);
+  }
+  
 }
 
 window.mouseDragged = () => {
