@@ -413,7 +413,10 @@ window.draw = () => {
   push();
   translate(-width/2, -height/2);
 
-  drawOctaveCircle();
+  // for some reason, this really slowed down my browser unless full performance is used, which can not be controlled.
+  // shall be re-implemented in shader instead. 
+  
+  // drawOctaveCircle();
 
   fill("white");
   textAlign(CENTER, CENTER);
@@ -507,72 +510,66 @@ function drawShader() {
   drawingContext.disable(drawingContext.DEPTH_TEST);
 }
 
-function drawOctaveCircle() {
+// function drawOctaveCircle() {
 
-  const radius = menuButtonFocused ? 38 : 36;
+//   const radius = menuButtonFocused ? 38 : 36;
 
-  push();
-  translate(radius+10, radius+10);
+//   push();
+//   translate(radius+10, radius+10);
 
-  //strokeWeight(25);
-  //fill("#000000C0");
-  //stroke("#000");
-  //ellipse(0, 0, radius*2, radius*2);
-  
+//   // add simple grid, only if there is a scale as well
+//   // if there is no scale, then all notes are visible so this isn't needed
+//   strokeWeight(2);
+//   if (scale.scaleRatios.length > 0) {
+//     stroke("#333");
+//     const stepCount = Math.ceil(ratioToCents(scale.periodRatio[1], scale.periodRatio[0]) / (1200 / scale.equalDivisions));
+//     for (let c = 0; c < stepCount; c++) {
+//       const stepCents = c * (1200 / scale.equalDivisions);
+//       const percentOfPeriod = stepCents / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+//       push();
+//       rotate(radians(percentOfPeriod * 360));
+//       line(0, 0, 0, -radius);
+//       pop();
+//     }
+//   }
 
-  // add simple grid, only if there is a scale as well
-  // if there is no scale, then all notes are visible so this isn't needed
-  strokeWeight(2);
-  if (scale.scaleRatios.length > 0) {
-    stroke("#333");
-    const stepCount = Math.ceil(ratioToCents(scale.periodRatio[1], scale.periodRatio[0]) / (1200 / scale.equalDivisions));
-    for (let c = 0; c < stepCount; c++) {
-      const stepCents = c * (1200 / scale.equalDivisions);
-      const percentOfPeriod = stepCents / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
-      push();
-      rotate(radians(percentOfPeriod * 360));
-      line(0, 0, 0, -radius);
-      pop();
-    }
-  }
+//   // scale
+//   scale.cents.forEach((cent) => {
+//     const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+//     const hue = percentOfOctave * 360;
+//     stroke(chroma.oklch(0.7, 0.25, hue).hex()); // Set line color
+//     push();
+//     rotate(radians(percentOfOctave * 360));
+//     line(0, 0, 0, -radius);
+//     pop();
+//   });
 
-  // scale
-  scale.cents.forEach((cent) => {
-    const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
-    const hue = percentOfOctave * 360;
-    stroke(chroma.oklch(0.7, 0.25, hue).hex()); // Set line color
-    push();
-    rotate(radians(percentOfOctave * 360));
-    line(0, 0, 0, -radius);
-    pop();
-  });
+//   stroke("white");
 
-  stroke("white");
-
-  // playing
-  channels.forEach((channel) => {
-    if (channel.source !== "off" && channel.properties.cents !== undefined) {
-      // draw line for played cent
-      const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
-      const percentOfOctave = (channel.properties.cents % periodCents) / periodCents;
+//   // playing
+//   channels.forEach((channel) => {
+//     if (channel.source !== "off" && channel.properties.cents !== undefined) {
+//       // draw line for played cent
+//       const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+//       const percentOfOctave = (channel.properties.cents % periodCents) / periodCents;
       
-      push();
+//       push();
 
-      rotate(radians(percentOfOctave * 360));
-      strokeWeight(1);
-      line(0, 0, 0, -radius);
-      strokeWeight(6);
-      line(0, -radius*0.94, 0, -radius*0.95);
+//       rotate(radians(percentOfOctave * 360));
+//       strokeWeight(1);
+//       line(0, 0, 0, -radius);
+//       strokeWeight(6);
+//       line(0, -radius*0.94, 0, -radius*0.95);
 
-      pop();
-    }
-  });
+//       pop();
+//     }
+//   });
 
-  noStroke();;
-  // fill("#FFFFFFB0");
-  // triangle(radius, -radius, radius, -radius+10, radius-10, -radius);
-  pop();
-}
+//   noStroke();;
+//   // fill("#FFFFFFB0");
+//   // triangle(radius, -radius, radius, -radius+10, radius-10, -radius);
+//   pop();
+// }
 
 function drawColumn(buffer) {
   buffer.background("black");
