@@ -78,6 +78,8 @@ button {
   font-size: 14px;
   margin-top: 8px;
   margin-bottom: 5px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .input-field {

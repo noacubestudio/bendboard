@@ -1,5 +1,8 @@
-let cnv; let tallBuffer;
+//enableWebGL2(window.p5)
+
+let cnv;
 const container = document.getElementById("canvas-container");
+let boldMonoFont;
 
 let mouseDown = false;
 let usingMouse = !(window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0);
@@ -40,7 +43,7 @@ const layout = {
 }
 const scale = {
   baseFrequency: 110.0,
-  maxSnapToCents: 30,
+  maxSnapToCents: 40,
   equalDivisions: 12,
   periodRatio: [2, 1], // range used for scales and EDO
   scaleRatios: [24, 27, 30, 32, 36, 40, 45, 48],
@@ -54,9 +57,22 @@ const midiSettings = {
   baseOctave: 3
 }
 
+let keyboardShader;
+
+window.preload = () => {
+
+  boldMonoFont = loadFont('iAWriterQuattroS-Bold.ttf');
+  keyboardShader = loadShader('shader.vert', 'shader.frag');
+}
+
 window.setup = () => {
-  cnv = createCanvas(windowWidth, windowHeight).parent(container);
-  tallBuffer = createGraphics(layout.columnWidth, windowHeight);
+  cnv = createCanvas(windowWidth, windowHeight, WEBGL).parent(container);
+
+  // disables scaling for retina screens which can create inconsistent scaling between displays
+  //pixelDensity(1);
+  let density = displayDensity();
+  pixelDensity(density);
+
   resizeEverything(usingMouse);
 
   // GUI and settings
@@ -142,11 +158,8 @@ window.setup = () => {
   delayFilter.drywet(delayWet);
 
   noLoop();
-  textFont('monospace');
+  textFont(boldMonoFont);
   rectMode(CORNERS);
-  tallBuffer.textFont('monospace');
-  tallBuffer.rectMode(CORNERS);
-  tallBuffer.strokeJoin(ROUND)
 
   // initialize all channels
   for (let i = 0; i < 10; i++) {
@@ -360,19 +373,6 @@ function resizeEverything(isMouse) {
   // set the starting point (initial frequency) somewhere in this area
   layout.baseX = Math.floor(constrain(newWidth / 2 - 200, 0, newWidth * 0.25));
   layout.baseY = Math.floor(constrain(newHeight / 2, 0, newHeight)); // vertical center
-
-  // based on layout settings, figure out how tall the buffer for the keyboard visual needs to be.
-  // this height is the screen height plus space for all visible offsets.
-  // each offset, positive or negative, is associated with a certain height in cents and ultimately pixels.
-
-  // first of all, find out how many columns are at least partially visible.
-  const visibleColumnCount = Math.ceil(newWidth / layout.columnWidth);
-
-  // besides the starting column, each adds an absolute offset in cents.
-  // then convert to pixels, adding the height of one column in full.
-  const offsetCents = Math.abs(layout.nextColumnOffsetCents) * (visibleColumnCount-1);
-  const totalHeight = newHeight + offsetCents * layout.centsToPixels;
-  tallBuffer.resizeCanvas(layout.columnWidth, totalHeight, false);
 }
 
 function getCentsArrFromSortedFractions(sortedFractionsArr) {
@@ -401,8 +401,13 @@ window.draw = () => {
 
   background("#000");
   noStroke();
- 
-  drawKeyboard();
+
+  drawShader();
+  resetShader();
+
+  // go to top left
+  push();
+  translate(-width/2, -height/2);
 
   drawOctaveCircle();
 
@@ -429,8 +434,73 @@ window.draw = () => {
     rect(0, 0, width, height);
     fill("white");
     textAlign(CENTER, CENTER);
-    text("Click/ Tap to start", width/2, height/2);
+    text("CLICK OR TAP TO START", width/2, height/2);
   }
+
+  pop();
+}
+
+function drawShader() {
+
+  drawingContext.depthMask(true);
+  drawingContext.enable(drawingContext.DEPTH_TEST);
+
+  shader(keyboardShader);
+
+  //position
+  const xTo01 = (x) => x / width;
+  const yTo01 = (y) => y / height;
+
+  const vecTo01 = ([x, y]) => [xTo01(x), 1 - yTo01(y)];
+
+  // base, permanent
+  keyboardShader.setUniform("u_resolution", [width * displayDensity(), height * displayDensity()]);
+  keyboardShader.setUniform("u_pixelHeight", yTo01(1));
+
+  // layout
+  keyboardShader.setUniform("u_basePosition", vecTo01([layout.baseX, layout.baseY]));
+  keyboardShader.setUniform("u_columnWidth", xTo01(layout.columnWidth));
+  keyboardShader.setUniform("u_columnOffsetY", yTo01(layout.nextColumnOffsetCents*layout.centsToPixels));
+  
+  // scale
+  const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+  keyboardShader.setUniform("u_octaveHeight", yTo01(layout.centsToPixels * periodCents))
+  keyboardShader.setUniform("u_edo", scale.equalDivisions);
+
+  const stepsYArray = [];
+  const stepsRedArray = [];
+  const stepsGreenArray = [];
+  const stepsBlueArray = [];
+  scale.cents.forEach((cent) => {
+    const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+    const hue = percentOfOctave * 360;
+    const color = chroma.oklch(0.6, 0.25, hue).rgb(false);
+    const [r, g, b] = color.map(value => value/255);
+
+    stepsYArray.push(yTo01(cent * layout.centsToPixels));
+    stepsRedArray.push(r);
+    stepsGreenArray.push(g);
+    stepsBlueArray.push(b);
+  });
+  keyboardShader.setUniform("u_stepsYarray", stepsYArray);
+  keyboardShader.setUniform("u_stepsRedArray", stepsRedArray);
+  keyboardShader.setUniform("u_stepsGreenArray", stepsGreenArray);
+  keyboardShader.setUniform("u_stepsBlueArray", stepsBlueArray);
+  keyboardShader.setUniform("u_stepsYarrayLength", stepsYArray.length);
+  const channelCents = channels.filter(ch => ch.source !== "off" && ch.properties.cents !== undefined);
+  const playYArray = channelCents.map(ch => yTo01(ch.properties.cents * layout.centsToPixels));
+  keyboardShader.setUniform("u_playYarray", playYArray);
+  keyboardShader.setUniform("u_playYarrayLength", playYArray.length);
+
+  //circle
+  const radius = menuButtonFocused ? 38 : 36;
+  keyboardShader.setUniform("u_circlePos", vecTo01([radius+10, radius+10]));
+  keyboardShader.setUniform("u_circleRadius", yTo01(radius));
+
+  rect(0,0,width,height);
+
+  drawingContext.depthMask(false);
+  drawingContext.disable(drawingContext.DEPTH_TEST);
 }
 
 function drawOctaveCircle() {
@@ -440,10 +510,10 @@ function drawOctaveCircle() {
   push();
   translate(radius+10, radius+10);
 
-  strokeWeight(25);
-  fill("#000000C0");
-  stroke("#000");
-  ellipse(0, 0, radius*2, radius*2);
+  //strokeWeight(25);
+  //fill("#000000C0");
+  //stroke("#000");
+  //ellipse(0, 0, radius*2, radius*2);
   
 
   // add simple grid, only if there is a scale as well
@@ -455,10 +525,10 @@ function drawOctaveCircle() {
     for (let c = 0; c < stepCount; c++) {
       const stepCents = c * (1200 / scale.equalDivisions);
       const percentOfPeriod = stepCents / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
-      const angle = -90 + percentOfPeriod * 360;
-      const outerX = radius * cos(radians(angle));
-      const outerY = radius * sin(radians(angle));
-      line(0, 0, outerX, outerY);
+      push();
+      rotate(radians(percentOfPeriod * 360));
+      line(0, 0, 0, -radius);
+      pop();
     }
   }
 
@@ -466,11 +536,11 @@ function drawOctaveCircle() {
   scale.cents.forEach((cent) => {
     const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
     const hue = percentOfOctave * 360;
-    const angle = -90 + percentOfOctave * 360;
-    const outerX = radius * cos(radians(angle));
-    const outerY = radius * sin(radians(angle));
-    stroke(chroma.oklch(0.6, 0.2, hue).hex()); // Set line color
-    line(0, 0, outerX, outerY);
+    stroke(chroma.oklch(0.7, 0.25, hue).hex()); // Set line color
+    push();
+    rotate(radians(percentOfOctave * 360));
+    line(0, 0, 0, -radius);
+    pop();
   });
 
   stroke("white");
@@ -481,19 +551,22 @@ function drawOctaveCircle() {
       // draw line for played cent
       const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
       const percentOfOctave = (channel.properties.cents % periodCents) / periodCents;
-      const angle = -90 + percentOfOctave * 360;
-      const outerX = radius * cos(radians(angle));
-      const outerY = radius * sin(radians(angle));
+      
+      push();
+
+      rotate(radians(percentOfOctave * 360));
       strokeWeight(1);
-      line(0, 0, outerX, outerY);
+      line(0, 0, 0, -radius);
       strokeWeight(6);
-      line(outerX, outerY, outerX, outerY);
+      line(0, -radius*0.94, 0, -radius*0.95);
+
+      pop();
     }
   });
 
   noStroke();;
-  fill("#FFFFFFB0");
-  triangle(radius, -radius, radius, -radius+10, radius-10, -radius);
+  // fill("#FFFFFFB0");
+  // triangle(radius, -radius, radius, -radius+10, radius-10, -radius);
   pop();
 }
 
@@ -596,37 +669,38 @@ function drawColumn(buffer) {
   });
 }
 
-function drawKeyboard() {
-  // use the buffer that covers the entire height in cents to tile the canvas.
-  // actually generate the tall image to cover the canvas with
-  drawColumn(tallBuffer);
 
-  // x position of slices
-  // can be a bit outside the left edge
+// function drawKeyboard() {
+//   // use the buffer that covers the entire height in cents to tile the canvas.
+//   // actually generate the tall image to cover the canvas with
+//   drawColumn(tallBuffer);
 
-  const firstColumnX = layout.baseX - layout.columnWidth * Math.ceil(layout.baseX / layout.columnWidth);
+//   // x position of slices
+//   // can be a bit outside the left edge
+
+//   const firstColumnX = layout.baseX - layout.columnWidth * Math.ceil(layout.baseX / layout.columnWidth);
   
-  const columnX = (i) => {return firstColumnX + i * layout.columnWidth};
+//   const columnX = (i) => {return firstColumnX + i * layout.columnWidth};
   
-  // y position of slices (as in, the top of the slice)
-  // positive offset: starts at the very bottom (minus screen height) and goes up in offset intervals 
-  // negative offset: starts at the very top and goes down in offset intervals
-  const columnY = (i) => {
-    if (layout.nextColumnOffsetCents === 0) return 0;
-    if (layout.nextColumnOffsetCents > 0) {
-      const firstColumnY = -tallBuffer.height + height;
-      return firstColumnY + i * layout.nextColumnOffsetCents * layout.centsToPixels;
-    } 
-    const firstColumnY = 0;
-    return firstColumnY - i * layout.nextColumnOffsetCents * layout.centsToPixels;
-  }
+//   // y position of slices (as in, the top of the slice)
+//   // positive offset: starts at the very bottom (minus screen height) and goes up in offset intervals 
+//   // negative offset: starts at the very top and goes down in offset intervals
+//   const columnY = (i) => {
+//     if (layout.nextColumnOffsetCents === 0) return 0;
+//     if (layout.nextColumnOffsetCents > 0) {
+//       const firstColumnY = -tallBuffer.height + height;
+//       return firstColumnY + i * layout.nextColumnOffsetCents * layout.centsToPixels;
+//     } 
+//     const firstColumnY = 0;
+//     return firstColumnY - i * layout.nextColumnOffsetCents * layout.centsToPixels;
+//   }
 
-  // loop until number of partially visible columns reached
-  const columnCount = Math.ceil(width / layout.columnWidth);
-  for (let i = 0; i < columnCount; i++) {
-    image(tallBuffer, columnX(i), columnY(i));
-  }
-}
+//   // loop until number of partially visible columns reached
+//   const columnCount = Math.ceil(width / layout.columnWidth);
+//   for (let i = 0; i < columnCount; i++) {
+//     image(tallBuffer, columnX(i), columnY(i));
+//   }
+// }
 
 function setFromScreenXY(channel, x, y, initType, id) {
 
@@ -773,7 +847,8 @@ function updateSnappingForChannel(channel, cents) {
 
 function getCompletelySnappedCents(c) {
   const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
-  const playedInOctaveCents = c % periodCents;
+  const playedInOctaveCents = wrapNumber(c, 0, periodCents);
+
   const scaleOctaveCents = [...scale.cents, periodCents];
 
   let lastPitch = null;
@@ -938,8 +1013,8 @@ function cleanRound(number) {
 
 
 function handleTouchStart(event) {
-  if (initializeAudioStep()) return;
   event.preventDefault();
+  if (initializeAudioStep()) return;
 
   event.changedTouches.forEach((touch) => {
     const id = touch.identifier;
@@ -956,6 +1031,7 @@ function handleTouchStart(event) {
 }
 
 function handleTouchMove(event) {
+  event.preventDefault();
   event.changedTouches.forEach((touch) => {
     const id = touch.identifier;
     const x = touch.clientX; const y = touch.clientY - 0;
@@ -971,6 +1047,7 @@ function handleTouchMove(event) {
 }
 
 function handleTouchEnd(event) {
+  event.preventDefault();
   event.changedTouches.forEach((touch) => {
     const id = touch.identifier;
     //const x = touch.clientX; const y = touch.clientY - 60;
@@ -1226,3 +1303,27 @@ function calculateNoteNumberFromName(note, octave) {
   
   return null; // Return null for invalid notes or black keys
 }
+
+// function enableWebGL2(p) {
+//   p.RendererGL.prototype._initContext = function () {
+//     try {
+//       this.drawingContext =
+//         this.canvas.getContext("webgl2", this._pInst._glAttributes) ||
+//         this.canvas.getContext("webgl", this._pInst._glAttributes) ||
+//         this.canvas.getContext("experimental-webgl", this._pInst._glAttributes)
+//       if (this.drawingContext === null) {
+//         throw new Error("Error creating webgl context")
+//       } else {
+//         const gl = this.drawingContext
+//         gl.enable(gl.DEPTH_TEST)
+//         gl.depthFunc(gl.LEQUAL)
+//         gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
+//         this._viewport = this.drawingContext.getParameter(this.drawingContext.VIEWPORT)
+//         // gl.enable(gl.SAMPLE_COVERAGE)
+//         // gl.sampleCoverage(0.2, true)
+//       }
+//     } catch (er) {
+//       throw er
+//     }
+//   }
+// }
