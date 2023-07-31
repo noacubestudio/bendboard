@@ -22,11 +22,15 @@ uniform int u_playYarrayLength;
 uniform vec2 u_circlePos;
 uniform float u_circleRadius;
 
+#define PI 3.14159265358979323844
+
 float semiPixel = u_pixelHeight * 0.5;
+vec2 octaveTileSize = vec2(u_columnWidth, u_octaveHeight);
+vec2 edoTileSize = vec2(u_columnWidth, u_octaveHeight/float(u_edo));
 
 // smoothing functions
 float curveUpDown(float t) {
-    float value = sin(t * 3.14159265358979323846);
+    float value = sin(t * PI);
     return (value + 1.0) * 0.5;
 }
 
@@ -54,19 +58,16 @@ vec3 screenBlend(vec3 baseColor, vec3 blendColor) {
     return result;
 }
 
-// vec2 toPolar(vec2 cartesian) {
-// 	float distance = dist(cartesian);
-// 	float angle = atan(cartesian.y, cartesian.x);
-// 	return vec2(angle / (3.14159265358979323846/2.0), distance);
-// }
+vec2 normCartToNormPolar(vec2 cartesian) {
+    float radius = length(cartesian);
+    float angle = atan(cartesian.x, cartesian.y);
+    float normAngle = (angle * 0.5 / PI + 0.5);
+    return vec2(radius, normAngle);
+}
 
 vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
     // 0,0 is the left edge of the column, base note position.
     vec2 deltaPos = kbPos - columnPos;
-
-    // repeating per octave and per edo step
-    vec2 octaveTileSize = vec2(u_columnWidth, u_octaveHeight);
-    vec2 edoTileSize = vec2(u_columnWidth, u_octaveHeight/float(u_edo));
 
     vec2 octavePos = mod(deltaPos, octaveTileSize);
     vec2 edoPos = mod(deltaPos, edoTileSize);
@@ -87,6 +88,14 @@ vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
     // scaled x in column
     float curvedX = curveUpDown(deltaPos.x / u_columnWidth);
 
+    // lines in column
+    float edoFretWeight = 0.2 / float(u_edo);
+    float nearestEdoFretY = minWrap(edoPos.y, edoTileSize.y);
+    float edoFretContour = fretMarker(curvedX, nearestEdoFretY, edoFretWeight);
+    if (edoFretContour > 0.0) {
+        additiveColor += mix(clearColor, edoLineColor, edoFretContour);
+    }
+
     // scale
     float scaleFretWeight = 0.2 / float(u_stepsYarrayLength);
     for (int i = 0; i < 128; i++) {
@@ -97,14 +106,6 @@ vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
             vec3 color = vec3(u_stepsRedArray[i], u_stepsGreenArray[i], u_stepsBlueArray[i]);
             additiveColor += mix(clearColor, color, scaleFretContour);
         }
-    }
-
-    // lines in column
-    float edoFretWeight = 0.2 / float(u_edo);
-    float nearestEdoFretY = minWrap(edoPos.y, edoTileSize.y);
-    float edoFretContour = fretMarker(curvedX, nearestEdoFretY, edoFretWeight);
-    if (edoFretContour > 0.0) {
-        additiveColor += mix(clearColor, edoLineColor, edoFretContour);
     }
 
     // highlight the first scalestep (each octave) with another layer
@@ -139,24 +140,69 @@ vec3 keyboardColor(vec2 normPos, vec2 centerPos) {
     return keyboardColumnColor;
 }
 
+vec3 circleColor(vec2 polarCoords) {
+
+    vec3 additiveColor = vec3(0.0);
+    vec3 lineColor = vec3(0.8);
+    vec3 edoLineColor = vec3(0.3);
+
+    polarCoords.y *= u_octaveHeight;
+    // scaled x in column
+    float curvedX = curveUpDown(polarCoords.x);
+
+    float edoY = mod(polarCoords.y, edoTileSize.y);
+
+    // lines in column
+    float edoFretWeight = 0.2 / float(u_edo);
+    float nearestEdoFretY = minWrap(edoY, edoTileSize.y);
+    float edoFretContour = fretMarker(curvedX, nearestEdoFretY, edoFretWeight);
+    if (edoFretContour > 0.0) {
+        additiveColor += mix(vec3(0.0), edoLineColor, edoFretContour);
+    }
+
+    // playing
+    for (int i = 0; i < 10; i++) {
+        if (i == u_playYarrayLength) break;
+        float inOctavePlayFret = mod(u_playYarray[i], u_octaveHeight);
+        float nearestPlayingY = minWrap(polarCoords.y - inOctavePlayFret, u_octaveHeight);
+        //float nearestPlayingAngle = nearestPlayingY / u_octaveHeight;
+        float playingMarkerContour = fretMarker(curvedX, nearestPlayingY, 0.05);
+        if (playingMarkerContour > 0.0) {
+            vec3 screenColor = mix(vec3(0.0), lineColor, playingMarkerContour);
+            additiveColor = screenBlend(additiveColor, screenColor);
+        }
+    }
+
+    return additiveColor;
+
+    //return vec3(polarCoords.y);
+}
+
 void main() {
     
     // screen position normalized to 0-1 range
     vec2 normalizedPos = gl_FragCoord.xy/u_resolution.xy;
 
+    // draw the keyboard and set colors for now
     vec2 keyboardCenterPos = u_basePosition;
     vec3 keyboardColor = keyboardColor(normalizedPos, keyboardCenterPos);
-
     gl_FragColor = vec4(keyboardColor, 1.0);
 
-    // darken area in top left where the circle goes
-    // WIP, actual visual currently still done in p5 portion
-    float dx = abs(u_circlePos.x - normalizedPos.x) * (u_resolution.x / u_resolution.y);
-    float dy = abs(u_circlePos.y - normalizedPos.y);
-    if (length(vec2(dx, dy)) < u_circleRadius*1.1) {
-        float inEdge = (1.0 - smoothstep(u_circleRadius*0.6, u_circleRadius*1.1, length(vec2(dx, dy))));
-        gl_FragColor *= 1.0-1.2*vec4(vec3(inEdge*1.0), 1.0);
-        //vec2 polarCoords = toPolar(vec2(dx, dy));
-        //gl_FragColor += vec4(polarCoords.x * 0.8, polarCoords.x * 0.6, polarCoords.x * 1.0, 1.0);
+    // octave circle in top left
+    vec2 circleXYdist = u_circlePos - normalizedPos;
+    circleXYdist.x *= (u_resolution.x / u_resolution.y);
+
+    // polar coords, normalized to the circle radius
+    vec2 normCircleDistCartesian = circleXYdist / u_circleRadius;
+    vec2 polarCoords = normCartToNormPolar(normCircleDistCartesian);
+
+    if (polarCoords.x < 1.0) {
+        float circleAlpha = 1.0 - smoothstep(0.8, 1.0, polarCoords.x);
+        // subtract black, add color
+        gl_FragColor -= vec4(vec3(circleAlpha), 1.0);
+        if (gl_FragColor.x < 0.0) gl_FragColor = vec4(vec3(0.0), 1.0);
+
+        vec3 visualsColor = circleColor(polarCoords);
+        gl_FragColor += vec4(mix(vec3(0.0), visualsColor, circleAlpha), 1.0);
     }
 }
