@@ -411,6 +411,10 @@ window.draw = () => {
   fill("white");
   textAlign(CENTER, CENTER);
 
+  // text at base position showing base freq
+  text(scale.baseFrequency, layout.baseX + layout.columnWidth*0.5, layout.baseY - 2);
+
+  // scale text under the octave circle
   scale.sortedFractions.forEach((ratioArr, index) => {
     const ratioString = ratioArr[0] + "/" + ratioArr[1];
     const cent = scale.cents[index % scale.cents.length];
@@ -499,138 +503,6 @@ function drawShader() {
   drawingContext.depthMask(false);
   drawingContext.disable(drawingContext.DEPTH_TEST);
 }
-
-function drawColumn(buffer) {
-  buffer.background("black");
-  buffer.textSize(10);
-  buffer.textAlign(CENTER, CENTER);
-  buffer.strokeWeight(1);
-
-  // get the number of columns and thus offsets under and over the baseX column
-  const columnsUnderBase = Math.ceil(layout.baseX / layout.columnWidth);
-  const xCentsUnderBase = columnsUnderBase * layout.nextColumnOffsetCents
-  const yCentsUnderBase = (height-layout.baseY) / layout.centsToPixels;
-
-  const totalCents = buffer.height / layout.centsToPixels;
-  const centsUnderBase = xCentsUnderBase + yCentsUnderBase;
-  const centsAboveBase = totalCents - centsUnderBase;
-
-  const columnCentsToPixels = (cents) => {return map(cents, 0, totalCents, buffer.height, 0)};
-
-  // mark base spot
-
-
-  // get list of period starting positions
-  const periodCentsArr = [];
-  const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
-  const visibleRepetitionsDown = Math.ceil(centsUnderBase / periodCents);
-  const visibleRepetitionsUp = Math.ceil(centsAboveBase / periodCents);
-  for (let r = -visibleRepetitionsDown; r < visibleRepetitionsUp; r++) {
-    periodCentsArr.push(r * periodCents);
-  }
-  const basePeriodIndex = visibleRepetitionsDown;
-
-  // for every repetition range...
-  periodCentsArr.forEach((pc, index) => {
-    const centsFromBottom = pc + centsUnderBase;
-
-    drawEDOGrid(centsFromBottom, periodCents);
-
-    drawRatioScale(centsFromBottom, periodCents, index - basePeriodIndex);
-  });
-
-  function drawEDOGrid(repStartCents, periodCents) {
-    // no scale ratios = all notes will be colored, so this grid won't show up.
-    if (scale.scaleRatios.length === 0) return;
-
-    buffer.stroke("#333");
-    buffer.strokeWeight(1);
-
-    const stepCount = Math.ceil(periodCents / (1200 / scale.equalDivisions));
-    for (let c = 0; c < stepCount; c++) {
-      const centsAboveRep = (c / scale.equalDivisions) * 1200;
-      const pixelsY = columnCentsToPixels(repStartCents + centsAboveRep);
-      buffer.line(buffer.width*0.05, pixelsY, buffer.width*0.95, pixelsY);
-    }
-  }
-
-  function drawRatioScale(repStartCents, periodCents, repetitionIndex) {
-    scale.cents.forEach((centsAboveRep) => {
-      //background circle
-      if (centsAboveRep === 0) {
-        buffer.fill((repetitionIndex === 0) ? "#FFFFFF18" : "#FFFFFF10");
-        buffer.noStroke();
-        buffer.ellipse(buffer.width * 0.5, columnCentsToPixels(repStartCents), buffer.width);
-      }
-
-      // draw colored line
-      const inOctaveHue = (centsAboveRep / periodCents) * 360;
-      buffer.strokeWeight(1);
-      buffer.stroke(chroma.oklch(0.6, 0.2, inOctaveHue).hex());
-      const pixelsY = columnCentsToPixels(repStartCents + centsAboveRep);
-      buffer.line(buffer.width*0.05, pixelsY, buffer.width*0.95, pixelsY);
-      buffer.strokeWeight(6);
-      buffer.line(buffer.width*0.3, pixelsY, buffer.width*0.7, pixelsY);
-
-      // octave number on top
-      if (centsAboveRep === 0) {
-        buffer.stroke("black");
-        buffer.fill("white");
-        buffer.text(repetitionIndex, buffer.width*0.5, pixelsY);
-      }
-    });
-  }
-
-  // playing
-  channels.forEach((channel) => {
-    if (channel.source !== "off" && channel.properties.cents !== undefined) {
-      // draw line for played cent
-      buffer.strokeWeight(1);
-      buffer.stroke("white");
-      const yPos = map(channel.properties.cents + centsUnderBase, 0, totalCents, buffer.height, 0);
-      buffer.line(0, yPos, buffer.width, yPos);
-      buffer.strokeWeight(4);
-      buffer.line(buffer.width*0.05, yPos, buffer.width*0.25, yPos);
-      buffer.line(buffer.width*0.75, yPos, buffer.width*0.95, yPos);
-      buffer.noStroke();
-      buffer.fill("white");
-      buffer.text(cleanRound(channel.properties.cents % periodCents), 0.5 * buffer.width, yPos - 15);
-    }
-  });
-}
-
-
-// function drawKeyboard() {
-//   // use the buffer that covers the entire height in cents to tile the canvas.
-//   // actually generate the tall image to cover the canvas with
-//   drawColumn(tallBuffer);
-
-//   // x position of slices
-//   // can be a bit outside the left edge
-
-//   const firstColumnX = layout.baseX - layout.columnWidth * Math.ceil(layout.baseX / layout.columnWidth);
-  
-//   const columnX = (i) => {return firstColumnX + i * layout.columnWidth};
-  
-//   // y position of slices (as in, the top of the slice)
-//   // positive offset: starts at the very bottom (minus screen height) and goes up in offset intervals 
-//   // negative offset: starts at the very top and goes down in offset intervals
-//   const columnY = (i) => {
-//     if (layout.nextColumnOffsetCents === 0) return 0;
-//     if (layout.nextColumnOffsetCents > 0) {
-//       const firstColumnY = -tallBuffer.height + height;
-//       return firstColumnY + i * layout.nextColumnOffsetCents * layout.centsToPixels;
-//     } 
-//     const firstColumnY = 0;
-//     return firstColumnY - i * layout.nextColumnOffsetCents * layout.centsToPixels;
-//   }
-
-//   // loop until number of partially visible columns reached
-//   const columnCount = Math.ceil(width / layout.columnWidth);
-//   for (let i = 0; i < columnCount; i++) {
-//     image(tallBuffer, columnX(i), columnY(i));
-//   }
-// }
 
 function setFromScreenXY(channel, x, y, initType, id) {
 

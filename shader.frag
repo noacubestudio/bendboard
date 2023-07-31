@@ -210,7 +210,7 @@ void main() {
     if (polarCoords.x < 1.0) {
         float circleAlpha = 1.0 - smoothstep(0.8, 1.0, polarCoords.x);
         // subtract
-        combinedColor = max(combinedColor - vec3(circleAlpha), vec3(0.0));
+        combinedColor = max(combinedColor - vec3(circleAlpha), 0.0);
         // add 
         vec3 visualsColor = circleColor(polarCoords);
         combinedColor += visualsColor * circleAlpha;
