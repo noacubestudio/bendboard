@@ -74,7 +74,7 @@ window.setup = () => {
   density = displayDensity();
 
   pixelDensity(density);
-  resizeEverything(usingMouse);
+  resizeCanvasAndLayout();
   print("Display density:", density, "mouse/desktop mode:", usingMouse);
 
   // GUI and settings
@@ -246,27 +246,22 @@ function readSettingsInput(target) {
         if (foundFractionArr[1] / foundFractionArr[2] > 1) {
           scale.periodRatio = [Number(foundFractionArr[1]), Number(foundFractionArr[2])];
           updateScaleProperties();
-          resizeEverything(usingMouse);
         }
       } else if (!isNaN(value)) {
         if (Number(value) > 1) {
           scale.periodRatio = [Number(value), 1];
           updateScaleProperties();
-          resizeEverything(usingMouse);
         }
       }
       break;
     case "xoffset":
       layout.nextColumnOffsetCents = value;
-      resizeEverything(usingMouse);
       break;
     case "height":
       if (value > 0) layout.centsToPixels = value;
-      resizeEverything(usingMouse);
       break;
     case "columnpx":
       if (value > 10 && value < width) layout.columnWidth = value;
-      resizeEverything(usingMouse);
       break;
     case "snaprange":
       if (value >= 0) scale.maxSnapToCents = value;
@@ -361,15 +356,15 @@ function moveUnderNextPeriod(scaleArr, modeNum, periodFraction) {
 }
 
 window.windowResized = () => {
-  resizeEverything(usingMouse);
+  resizeCanvasAndLayout();
   window.draw();
 }
 
-function resizeEverything(isMouse) {
+function resizeCanvasAndLayout() {
   // set new dimensions, resize canvas, but don't draw yet.
   // on PC, leave some room for the scrollbar.
-  let newHeight = (isMouse) ? windowHeight - 6 : windowHeight;
-  let newWidth = (isMouse) ? windowWidth - 6 : windowWidth;
+  let newHeight = windowHeight - 2;
+  let newWidth = windowWidth - 2;
   resizeCanvas(newWidth, newHeight, false);
 
   // set the starting point (initial frequency) somewhere in this area
@@ -415,7 +410,7 @@ window.draw = () => {
 
   // for some reason, this really slowed down my browser unless full performance is used, which can not be controlled.
   // shall be re-implemented in shader instead. 
-  
+
   // drawOctaveCircle();
 
   fill("white");
@@ -1070,13 +1065,10 @@ function handleTouchEnd(event) {
 }
 
 window.mouseMoved = () => {
-  if (!usingMouse) {
+  if (!usingMouse && !navigator.maxTouchPoints > 0) {
     usingMouse = true;
-    resizeEverything(usingMouse);
-    window.draw();
     print("mouse move detected: mouse/desktop mode:", usingMouse);
   }
-  
 }
 
 window.mouseDragged = () => {
