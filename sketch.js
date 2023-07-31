@@ -416,6 +416,8 @@ window.draw = () => {
     const cent = scale.cents[index % scale.cents.length];
     const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
     const hue = percentOfOctave * 360;
+    fill("#00000090");
+    ellipse(46, 102 + index * 20, ratioString.length*10, 18);
     fill(chroma.oklch(0.8, 0.2, hue).hex()); // Set line color
     text(`${ratioString}`, 46,  100 + index * 20);
   })
