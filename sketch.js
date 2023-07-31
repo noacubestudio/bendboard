@@ -408,23 +408,79 @@ window.draw = () => {
   push();
   translate(-width/2, -height/2);
 
+  // text at base position showing base freq
   fill("white");
   textAlign(CENTER, CENTER);
-
-  // text at base position showing base freq
   text(scale.baseFrequency, layout.baseX + layout.columnWidth*0.5, layout.baseY - 2);
 
-  // scale text under the octave circle
-  scale.sortedFractions.forEach((ratioArr, index) => {
-    const ratioString = ratioArr[0] + "/" + ratioArr[1];
-    const cent = scale.cents[index % scale.cents.length];
-    const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
-    const hue = percentOfOctave * 360;
+  // grab playing notes
+  const playingSteps = channels.filter(ch => ch.source !== "off" && (!isNaN(ch.properties.midiOffset) || !isNaN(ch.properties.kbdstep)));
+  let fractionItems = [];
+
+  if (playingSteps.length > 0) {
+    // from lowest to highest, relative to lowest step
+    const offsetSteps = playingSteps.map(ch => ch.properties.midiOffset ?? ch.properties.kbdstep);
+    offsetSteps.sort((a, b) => a - b);
+
+    // ratio of lowest step to start of that octave
+    const baseStepOctave = Math.floor(offsetSteps[0] / scale.cents.length);
+    const baseStep = offsetSteps[0] - baseStepOctave * scale.cents.length;
+    const baseStepRatio = scale.sortedFractions[baseStep];
+
+    // get ratios of steps relative to that lowest step
+    offsetSteps.forEach((step) => {
+
+      // ratio of the selected step to start of the octave it is in
+      const stepOctave = Math.floor(step / scale.cents.length);
+      const stepInOctave = step - stepOctave * scale.cents.length;
+      const stepRatio = scale.sortedFractions[stepInOctave];
+
+      // ratio to multiply by to account for octave delta from base
+      const deltaOctaves = stepOctave - baseStepOctave;
+      let octavesRatio = [
+        scale.periodRatio[0] ** Math.abs(deltaOctaves), 
+        scale.periodRatio[1] ** Math.abs(deltaOctaves)
+      ];
+      // divide if below 0
+      if (deltaOctaves < 0) [octavesRatio[0], octavesRatio[1]] = [octavesRatio[1], octavesRatio[0]];
+
+      // finally, get the ratio between this step and the base like this:
+      // divide by the base step ratio, multiply by the step ratio, multiply by octaves ratio
+      const finalRatio = getSimplifiedFractionArray(
+        baseStepRatio[1] * stepRatio[0] * octavesRatio[0],
+        baseStepRatio[0] * stepRatio[1] * octavesRatio[1]
+      );
+
+      const ratioString = finalRatio[0] + "/" + finalRatio[1];
+      // cents array is sorted just like the steps, so can be used here
+      // color based on cents relative to total cents in the period
+      const cent = scale.cents[stepInOctave];
+      const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+      const hue = percentOfOctave * 360;
+      fractionItems.push({step, ratioString, hue});
+    });
+    
+    //text(`${JSON.stringify(offsetSteps)}`, width - 20, height - 20);
+  } else {
+    // show full scale instead
+    scale.sortedFractions.forEach((ratioArr, index) => {
+      const ratioString = ratioArr[0] + "/" + ratioArr[1];
+      const cent = scale.cents[index % scale.cents.length];
+      const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+      const hue = percentOfOctave * 360;
+      fractionItems.push({step: index, ratioString, hue});
+    });
+  }
+
+  // display under the octave circle
+  fractionItems.forEach((item, index) => {
     fill("#00000090");
-    ellipse(46, 102 + index * 20, ratioString.length*10, 18);
-    fill(chroma.oklch(0.8, 0.2, hue).hex()); // Set line color
-    text(`${ratioString}`, 46,  100 + index * 20);
-  })
+    ellipse(46, 102 + index * 20, item.ratioString.length*10, 18);
+    fill(chroma.oklch(0.8, 0.2, item.hue).hex()); // Set line color
+    text(`${item.ratioString}`, 46,  100 + index * 20);
+  });
+
+
   strokeWeight(1);
 
   //text(`${JSON.stringify(countChannelTypes())}`, width - 20, height - 20);
