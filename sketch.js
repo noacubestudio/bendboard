@@ -488,8 +488,8 @@ function drawShader() {
   keyboardShader.setUniform("u_playYarrayLength", playYArray.length);
 
   //circle
-  const radius = menuButtonFocused ? 38 : 36;
-  keyboardShader.setUniform("u_circlePos", vecTo01([radius+10, radius+10]));
+  const radius = menuButtonFocused ? 40 : 44;
+  keyboardShader.setUniform("u_circlePos", vecTo01([46, 46]));
   keyboardShader.setUniform("u_circleRadius", yTo01(radius));
 
   rect(0,0,width,height);
