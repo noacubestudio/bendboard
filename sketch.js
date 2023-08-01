@@ -1,34 +1,26 @@
-//enableWebGL2(window.p5)
+// PROPERTIES, STATE
 
-let cnv; let density = 1;
-const container = document.getElementById("canvas-container");
-let boldMonoFont;
-
-let mouseDown = false;
-let usingMouse = false; //!(window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0);
-
-let audioStarted = false;
-let webMidiLibraryEnabled = false;
-
-let totalTouches = 0;
-let totalMidi = 0;
+// set if there was hover
+let ignoreTouchEvents = false;
 
 let settingsFocused = false;
 let menuButtonFocused = false;
 
+// audio
+let audioStarted = false;
+let webMidiLibraryEnabled = false;
 
 // sound settings
 let lpFilter; let delayFilter;
 let delayWet = 0.7;
 let waveform = "sawtooth";
 
-const channels = [];
-// initialed with 10 channels, 
+const soundsArray = [];
+// initialized with 10 voices, 
 // each contains:
 // - synth object
-// - source type: off, kbd, touch, mouse, ref. (off = filled again first before starting a new synth)
-// - properties: cents (from basenote)
-
+// - source type: off, kbd, touch, mouse (off = filled again first before starting a new synth)
+// - properties: cents (from basenote), step, etc...
 
 const layout = {
   // start point
@@ -56,25 +48,39 @@ const midiSettings = {
   baseOctave: 3
 }
 
+
+// LOAD
+
+let boldMonoFont;
 let keyboardShader;
 
 window.preload = () => {
-
   boldMonoFont = loadFont('iAWriterQuattroS-Bold.ttf');
   keyboardShader = loadShader('shader.vert', 'shader.frag');
 }
 
+
+// CANVAS AND INTERFACE
+
+let cnv; let density = 1;
+const container = document.getElementById("canvas-container");
+
 window.setup = () => {
+
+  // p5 setup
   cnv = createCanvas(windowWidth, windowHeight, WEBGL).parent(container);
+  noLoop();
+  textFont(boldMonoFont);
+  rectMode(CORNERS);
 
-
-  // disables scaling for retina screens which can create inconsistent scaling between displays
-  // HIGHER RESOLUTION OPTION:
-  density = displayDensity();
-
+  // set density
+  density = displayDensity(); // 1
   pixelDensity(density);
+  print("Display density:", density);
+  print("Handling touch events. Switches to mouse events on hover.")
+
+  // match initial window size
   resizeCanvasAndLayout();
-  print("Display density:", density, "mouse/desktop mode:", usingMouse);
 
   // GUI and settings
   const menuButton = document.getElementById("menuButton");
@@ -98,6 +104,8 @@ window.setup = () => {
 
   // initial write to the settings input
   writeSettingsFromArray(settingsDiv, initialSettings);
+  // initial settings from the default inputs
+  updateScaleProperties();
 
   // show/hide the settings input
   menuButton.addEventListener("click", (event) => {
@@ -132,17 +140,17 @@ window.setup = () => {
   });
 
   // change focused state
-  menuButton.addEventListener('mouseenter', () => {if (usingMouse) menuButtonFocused = true; window.draw();});
-  menuButton.addEventListener('mouseleave', () => {if (usingMouse) menuButtonFocused = false; window.draw();});
-  settingsDiv.addEventListener('mouseenter', () => {if (usingMouse) settingsFocused = true;});
-  settingsDiv.addEventListener('mouseleave', () => {if (usingMouse) settingsFocused = false;});
-
-  // initial settings from the default inputs
-  updateScaleProperties();
+  menuButton.addEventListener('mouseenter', () => {if (ignoreTouchEvents) menuButtonFocused = true; window.draw();});
+  menuButton.addEventListener('mouseleave', () => {if (ignoreTouchEvents) menuButtonFocused = false; window.draw();});
+  settingsDiv.addEventListener('mouseenter', () => {if (ignoreTouchEvents) settingsFocused = true;});
+  settingsDiv.addEventListener('mouseleave', () => {if (ignoreTouchEvents) settingsFocused = false;});
 
   cnv.touchStarted(handleTouchStart);
   cnv.touchMoved(handleTouchMove);
   cnv.touchEnded(handleTouchEnd);
+
+
+  // CONNECT AUDIO NODES
 
   lpFilter = new p5.BandPass();
   lpFilter.res(1);
@@ -158,16 +166,9 @@ window.setup = () => {
   delayFilter.setType(1);
   delayFilter.drywet(delayWet);
 
-  noLoop();
-  textFont(boldMonoFont);
-  rectMode(CORNERS);
-
   // initialize all channels
   for (let i = 0; i < 10; i++) {
-    
-    let source = "off";
     let synth = new p5.Oscillator();
-    let properties = {};
 
     synth.disconnect();
     synth.connect(lpFilter);
@@ -175,8 +176,24 @@ window.setup = () => {
     synth.freq(scale.baseFrequency)
     synth.amp(0.5);
 
-    channels.push({synth: synth, source: source, properties: properties});
+    soundsArray.push({synth, source: "off", properties: {}});
   }
+}
+
+window.windowResized = () => {
+  resizeCanvasAndLayout();
+  window.draw();
+}
+
+function resizeCanvasAndLayout() {
+  // leaving some room to prevent scrollbars
+  let newHeight = windowHeight - 2;
+  let newWidth = windowWidth - 2;
+  resizeCanvas(newWidth, newHeight, false); // no redraw
+
+  // set the starting point (initial frequency) somewhere in this area
+  layout.baseX = Math.floor(constrain(newWidth / 2 - 200, 0, newWidth * 0.25));
+  layout.baseY = Math.floor(constrain(newHeight / 2, 0, newHeight)); // vertical center
 }
 
 function writeSettingsFromArray(settingsDiv, settingsArray) {
@@ -268,8 +285,8 @@ function readSettingsInput(target) {
     case "waveform":
       if (["sine", "square", "triangle","sawtooth"].includes(value)) {
         waveform = value;
-        for (let i = 0; i < channels.length; i++) {
-          channels[i].synth.setType(waveform);
+        for (let i = 0; i < soundsArray.length; i++) {
+          soundsArray[i].synth.setType(waveform);
         }
       }
       break;
@@ -290,7 +307,6 @@ function readSettingsInput(target) {
       console.log("Property " + name + " was not found!")
       break;
   }
-
   window.draw();
 }
 
@@ -353,23 +369,6 @@ function moveUnderNextPeriod(scaleArr, modeNum, periodFraction) {
   return scaleArr.concat(movedElements);
 }
 
-window.windowResized = () => {
-  resizeCanvasAndLayout();
-  window.draw();
-}
-
-function resizeCanvasAndLayout() {
-  // set new dimensions, resize canvas, but don't draw yet.
-  // on PC, leave some room for the scrollbar.
-  let newHeight = windowHeight - 2;
-  let newWidth = windowWidth - 2;
-  resizeCanvas(newWidth, newHeight, false);
-
-  // set the starting point (initial frequency) somewhere in this area
-  layout.baseX = Math.floor(constrain(newWidth / 2 - 200, 0, newWidth * 0.25));
-  layout.baseY = Math.floor(constrain(newHeight / 2, 0, newHeight)); // vertical center
-}
-
 function getCentsArrFromSortedFractions(sortedFractionsArr) {
   let scaleCents = [];
   for (let i = 0; i < sortedFractionsArr.length; i++) {
@@ -392,6 +391,9 @@ function getCentsArrFromEDO(edo, periodRatio) {
   return scaleCents;
 }
 
+
+
+
 window.draw = () => {
 
   if (window._renderer == undefined) return;
@@ -399,6 +401,7 @@ window.draw = () => {
   background("#000");
   noStroke();
 
+  // draws the keyboard and octave circle
   drawShader();
   resetShader();
 
@@ -411,12 +414,112 @@ window.draw = () => {
   textAlign(CENTER, CENTER);
   text(scale.baseFrequency, layout.baseX + layout.columnWidth*0.5, layout.baseY - 2);
 
-  // grab playing pitches
-  const playingChannels = channels.filter(ch => ch.source !== "off");
+  const playingSteps = getStepsFromSoundsArray(soundsArray.filter(ch => ch.source !== "off"));
+  // text(`${JSON.stringify(playingSteps)}`, width/2, 20);
+
+  const fractionItems = getFractionsDisplayFromPlayingSteps(playingSteps);
+
+  // display under the octave circle
+  fractionItems.forEach((item, index) => {
+    const displayText = item.ratioString ?? wrapNumber(item.step, 0, scale.cents.length).toString() ?? "?";
+    fill(chroma("black").alpha(item.opacity * 0.6).hex());
+    ellipse(46, 102 + index * 20, Math.max(displayText.length*10, 18), 18);
+    const fillHex = chroma.oklch(0.8, 0.2, item.hue).alpha(item.opacity).hex();
+    fill(fillHex);
+    text(displayText, 46,  100 + index * 20);
+  });
+
+  //overlay if audio not started
+  if (!audioStarted) {
+    fill("#00000090");
+    rect(0, 0, width, height);
+    fill("white");
+    textAlign(CENTER, CENTER);
+    text("CLICK OR TAP TO START", width/2, height/2);
+  }
+
+  pop();
+}
+
+
+function drawShader() {
+
+  drawingContext.depthMask(true);
+  drawingContext.enable(drawingContext.DEPTH_TEST);
+
+  shader(keyboardShader);
+
+  //position
+  const xTo01 = (x) => x / width;
+  const yTo01 = (y) => y / height;
+
+  const vecTo01 = ([x, y]) => [xTo01(x), 1 - yTo01(y)];
+
+  // base, permanent
+  keyboardShader.setUniform("u_resolution", [width * density, height * density]);
+  keyboardShader.setUniform("u_pixelHeight", yTo01(1));
+
+  // layout
+  keyboardShader.setUniform("u_basePosition", vecTo01([layout.baseX, layout.baseY]));
+  keyboardShader.setUniform("u_columnWidth", xTo01(layout.columnWidth));
+  keyboardShader.setUniform("u_columnOffsetY", yTo01(layout.nextColumnOffsetCents*layout.centsToPixels));
+  
+  // scale
+  const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+  keyboardShader.setUniform("u_octaveHeight", yTo01(layout.centsToPixels * periodCents))
+  keyboardShader.setUniform("u_edo", scale.equalDivisions);
+
+  const stepsYArray = [];
+  const stepsRedArray = [];
+  const stepsGreenArray = [];
+  const stepsBlueArray = [];
+  scale.cents.forEach((cent) => {
+    const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+    const hue = percentOfOctave * 360;
+    const color = chroma.oklch(0.6, 0.25, hue).rgb(false);
+    const [r, g, b] = color.map(value => value/255);
+
+    stepsYArray.push(yTo01(cent * layout.centsToPixels));
+    stepsRedArray.push(r);
+    stepsGreenArray.push(g);
+    stepsBlueArray.push(b);
+  });
+  keyboardShader.setUniform("u_stepsYarray", stepsYArray);
+  keyboardShader.setUniform("u_stepsRedArray", stepsRedArray);
+  keyboardShader.setUniform("u_stepsGreenArray", stepsGreenArray);
+  keyboardShader.setUniform("u_stepsBlueArray", stepsBlueArray);
+  keyboardShader.setUniform("u_stepsYarrayLength", stepsYArray.length);
+  const channelCents = soundsArray.filter(ch => ch.source !== "off" && ch.properties.cents !== undefined);
+  const playYArray = channelCents.map(ch => yTo01(ch.properties.cents * layout.centsToPixels));
+  keyboardShader.setUniform("u_playYarray", playYArray);
+  keyboardShader.setUniform("u_playYarrayLength", playYArray.length);
+
+  //circle
+  const radius = menuButtonFocused ? 40 : 44;
+  keyboardShader.setUniform("u_circlePos", vecTo01([46, 46]));
+  keyboardShader.setUniform("u_circleRadius", yTo01(radius));
+
+  rect(0,0,width,height);
+
+  drawingContext.depthMask(false);
+  drawingContext.disable(drawingContext.DEPTH_TEST);
+}
+
+
+function getStepsFromSoundsArray(playingChannels) {
   // get the exact step that is playing with kbd/midi, or that is closest in cents
   // dist parameter describes how close a played pitch is to the nearest step
   const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
-  let playingSteps = playingChannels.map(ch => {
+  
+  function findClosestIndex(sortedArray, target) {
+    return sortedArray.reduce(
+      (acc, curr, index) =>
+        Math.abs(curr - target) < Math.abs(sortedArray[acc] - target) ? index : acc,
+      0
+    );
+  }
+  
+  return playingChannels.map(ch => {
     if (!isNaN(ch.properties.midiOffset)) return {offset: ch.properties.midiOffset, dist: 0};
     if (!isNaN(ch.properties.kbdstep)) return {offset: ch.properties.kbdstep, dist: 0};
 
@@ -428,18 +531,10 @@ window.draw = () => {
     const distanceToStep = Math.abs(playedCents - stepOffsetToCents(closestStep));
     return {offset: closestStep, dist: distanceToStep};
   });
+}
 
-  function findClosestIndex(sortedArray, target) {
-    return sortedArray.reduce(
-      (acc, curr, index) =>
-        Math.abs(curr - target) < Math.abs(sortedArray[acc] - target) ? index : acc,
-      0
-    );
-  }
-
-  // text(`${JSON.stringify(playingSteps)}`, width/2, 20);
-
-  // get fractions for all the played steps
+// get fractions for all the played steps
+function getFractionsDisplayFromPlayingSteps(playingSteps) {
   let fractionItems = [];
 
   // only if nothing is playing, show the full scale instead
@@ -504,96 +599,9 @@ window.draw = () => {
       fractionItems.push({step, ratioString, hue, opacity});
     });
   }
-
-  // display under the octave circle
-  fractionItems.forEach((item, index) => {
-    const displayText = item.ratioString ?? wrapNumber(item.step, 0, scale.cents.length).toString() ?? "?";
-    fill(chroma("black").alpha(item.opacity * 0.6).hex());
-    ellipse(46, 102 + index * 20, Math.max(displayText.length*10, 18), 18);
-    const fillHex = chroma.oklch(0.8, 0.2, item.hue).alpha(item.opacity).hex();
-    fill(fillHex);
-    text(displayText, 46,  100 + index * 20);
-  });
-
-
-  strokeWeight(1);
-
-  //text(`${JSON.stringify(countChannelTypes())}`, width - 20, height - 20);
-
-  //overlay if audio not started
-  if (!audioStarted) {
-    fill("#00000090");
-    rect(0, 0, width, height);
-    fill("white");
-    textAlign(CENTER, CENTER);
-    text("CLICK OR TAP TO START", width/2, height/2);
-  }
-
-  pop();
+  return fractionItems;
 }
 
-function drawShader() {
-
-  drawingContext.depthMask(true);
-  drawingContext.enable(drawingContext.DEPTH_TEST);
-
-  shader(keyboardShader);
-
-  //position
-  const xTo01 = (x) => x / width;
-  const yTo01 = (y) => y / height;
-
-  const vecTo01 = ([x, y]) => [xTo01(x), 1 - yTo01(y)];
-
-  // base, permanent
-  keyboardShader.setUniform("u_resolution", [width * density, height * density]);
-  keyboardShader.setUniform("u_pixelHeight", yTo01(1));
-
-  // layout
-  keyboardShader.setUniform("u_basePosition", vecTo01([layout.baseX, layout.baseY]));
-  keyboardShader.setUniform("u_columnWidth", xTo01(layout.columnWidth));
-  keyboardShader.setUniform("u_columnOffsetY", yTo01(layout.nextColumnOffsetCents*layout.centsToPixels));
-  
-  // scale
-  const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
-  keyboardShader.setUniform("u_octaveHeight", yTo01(layout.centsToPixels * periodCents))
-  keyboardShader.setUniform("u_edo", scale.equalDivisions);
-
-  const stepsYArray = [];
-  const stepsRedArray = [];
-  const stepsGreenArray = [];
-  const stepsBlueArray = [];
-  scale.cents.forEach((cent) => {
-    const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
-    const hue = percentOfOctave * 360;
-    const color = chroma.oklch(0.6, 0.25, hue).rgb(false);
-    const [r, g, b] = color.map(value => value/255);
-
-    stepsYArray.push(yTo01(cent * layout.centsToPixels));
-    stepsRedArray.push(r);
-    stepsGreenArray.push(g);
-    stepsBlueArray.push(b);
-  });
-  keyboardShader.setUniform("u_stepsYarray", stepsYArray);
-  keyboardShader.setUniform("u_stepsRedArray", stepsRedArray);
-  keyboardShader.setUniform("u_stepsGreenArray", stepsGreenArray);
-  keyboardShader.setUniform("u_stepsBlueArray", stepsBlueArray);
-  keyboardShader.setUniform("u_stepsYarrayLength", stepsYArray.length);
-  const channelCents = channels.filter(ch => ch.source !== "off" && ch.properties.cents !== undefined);
-  const playYArray = channelCents.map(ch => yTo01(ch.properties.cents * layout.centsToPixels));
-  keyboardShader.setUniform("u_playYarray", playYArray);
-  keyboardShader.setUniform("u_playYarrayLength", playYArray.length);
-
-  //circle
-  const radius = menuButtonFocused ? 40 : 44;
-  keyboardShader.setUniform("u_circlePos", vecTo01([46, 46]));
-  keyboardShader.setUniform("u_circleRadius", yTo01(radius));
-
-  rect(0,0,width,height);
-
-  drawingContext.depthMask(false);
-  drawingContext.disable(drawingContext.DEPTH_TEST);
-}
 
 function setFromScreenXY(channel, x, y, initType, id) {
 
@@ -761,8 +769,8 @@ function initChannel(channel, type, id) {
 }
 
 function firstChannel(source) {
-  for (let i = 0; i < channels.length; i++) {
-    if (channels[i].source === source) {
+  for (let i = 0; i < soundsArray.length; i++) {
+    if (soundsArray[i].source === source) {
       return i;
     }
   }
@@ -770,7 +778,7 @@ function firstChannel(source) {
 
 function countChannelTypes() {
   const count = {};
-  channels.forEach((c) => {
+  soundsArray.forEach((c) => {
     if (count[c.source] === undefined) {
       count[c.source] = 0;
     }
@@ -781,52 +789,27 @@ function countChannelTypes() {
 
 function exactChannel(source, id) {
   if (source === "kbd") {
-    for (let i = 0; i < channels.length; i++) {
-      const channel = channels[i];
+    for (let i = 0; i < soundsArray.length; i++) {
+      const channel = soundsArray[i];
       if (channel.source === source && channel.properties.kbdstep === id) {
         return i;
       }
     }
   } else if (source === "midi") {
-    for (let i = 0; i < channels.length; i++) {
-      const channel = channels[i];
+    for (let i = 0; i < soundsArray.length; i++) {
+      const channel = soundsArray[i];
       if (channel.source === source && channel.properties.midiOffset === id) {
         return i;
       }
     }
   } else if (source === "touch") {
-    for (let i = 0; i < channels.length; i++) {
-      const channel = channels[i];
+    for (let i = 0; i < soundsArray.length; i++) {
+      const channel = soundsArray[i];
       if (channel.source === source && channel.properties.id === id) {
         return i;
       }
     }
   }
-}
-
-function outsideCanvas(x, y) {
-  if (x < 0) return true
-  if (x > width) return true
-  if (y < 0) return true
-  if (y > height) return true
-
-  // if (x < 60 && y < 50) {
-  //   // menu
-  //   randomizeScale();
-  //   window.draw();
-  //   return true;
-  // }
-  // if (x < 120 && y < 50) {
-  //   // menu
-  //   changeSnapping();
-  //   window.draw();
-  //   return true;
-  // }
-}
-
-function changeSnapping() {
-  scale.maxSnapToCents += 15;
-  scale.maxSnapToCents = scale.maxSnapToCents % 60;
 }
 
 function stepOffsetToCents(offset) {
@@ -898,6 +881,15 @@ function cleanRound(number) {
 
 
 
+// EVENT HANDLING
+
+function outsideCanvas(x, y) {
+  if (x < 0) return true
+  if (x > width) return true
+  if (y < 0) return true
+  if (y > height) return true
+}
+
 function handleTouchStart(event) {
   event.preventDefault();
   if (initializeAudioStep()) return;
@@ -907,7 +899,7 @@ function handleTouchStart(event) {
     const x = touch.clientX; const y = touch.clientY - 0;
     if (outsideCanvas(x, y)) return;
     
-    const channel = channels[firstChannel("off")];
+    const channel = soundsArray[firstChannel("off")];
     if (channel !== undefined) {
       setFromScreenXY(channel, x, y, "touch", id);
 
@@ -923,7 +915,7 @@ function handleTouchMove(event) {
     const x = touch.clientX; const y = touch.clientY - 0;
     if (outsideCanvas(x, y)) return;
     
-    const channel = channels[exactChannel("touch", id)];
+    const channel = soundsArray[exactChannel("touch", id)];
     if (channel !== undefined) {
       setFromScreenXY(channel, x, y);
   
@@ -938,7 +930,7 @@ function handleTouchEnd(event) {
     const id = touch.identifier;
     //const x = touch.clientX; const y = touch.clientY - 60;
     
-    const channel = channels[exactChannel("touch", id)];
+    const channel = soundsArray[exactChannel("touch", id)];
     if (channel !== undefined) {
       channel.source = "off";
       channel.properties = {};
@@ -955,20 +947,20 @@ function handleTouchEnd(event) {
 }
 
 window.mouseMoved = () => {
-  if (!usingMouse && !navigator.maxTouchPoints > 0) {
-    usingMouse = true;
-    print("mouse move detected: mouse/desktop mode:", usingMouse);
+  if (!ignoreTouchEvents && !navigator.maxTouchPoints > 0) {
+    ignoreTouchEvents = true;
+    print("mouse move detected: mouse/desktop mode:", ignoreTouchEvents);
   }
 }
 
 window.mouseDragged = () => {
   if (settingsFocused || menuButtonFocused) return;
-  if (!usingMouse)
+  if (!ignoreTouchEvents)
     return;
   if (outsideCanvas(mouseX, mouseY))
     return;
 
-  const channel = channels[firstChannel("mouse")];
+  const channel = soundsArray[firstChannel("mouse")];
   if (channel !== undefined) {
     setFromScreenXY(channel, mouseX, mouseY);
 
@@ -979,12 +971,10 @@ window.mouseDragged = () => {
 window.mousePressed = () => {
   if (initializeAudioStep()) return;
   if (settingsFocused || menuButtonFocused) return;
-  if (!usingMouse) return
+  if (!ignoreTouchEvents) return
   if (outsideCanvas(mouseX, mouseY)) return;
   
-  mouseDown = true;
-  
-  const channel = channels[firstChannel("off")];
+  const channel = soundsArray[firstChannel("off")];
   if (channel !== undefined) {
     setFromScreenXY(channel, mouseX, mouseY, "mouse");
 
@@ -993,10 +983,9 @@ window.mousePressed = () => {
 }
 
 window.mouseReleased = () => {
-  if (!usingMouse) return
-  mouseDown = false;
+  if (!ignoreTouchEvents) return
   
-  const channel = channels[firstChannel("mouse")];
+  const channel = soundsArray[firstChannel("mouse")];
   if (channel !== undefined) {
     channel.source = "off";
     channel.properties = {};
@@ -1019,13 +1008,13 @@ function initializeAudioStep() {
 function stopAllChannels(type) {
   if (type === undefined) {
     // just stop all
-    channels.forEach((channel) => {
+    soundsArray.forEach((channel) => {
       channel.properties = {};
       channel.source = "off";
       channel.synth.stop();
     });
   } else {
-    channels.forEach((channel) => {
+    soundsArray.forEach((channel) => {
       if (channel.source === type) {
         channel.properties = {};
         channel.source = "off";
@@ -1044,7 +1033,7 @@ window.keyPressed = () => {
   const keyIndex = "1234567890".indexOf(key);
   if (keyIndex === -1) return;
 
-  const channel = channels[firstChannel("off")];
+  const channel = soundsArray[firstChannel("off")];
   if (channel !== undefined) {
     setFromKbd(channel, keyIndex);
     channel.source = "kbd";
@@ -1057,7 +1046,7 @@ window.keyReleased = () => {
   const keyIndex = "1234567890".indexOf(key);
   if (keyIndex === -1) return;
 
-  const channel = channels[exactChannel("kbd", keyIndex)];
+  const channel = soundsArray[exactChannel("kbd", keyIndex)];
   if (channel !== undefined) {
     channel.source = "off";
     channel.properties = {};
@@ -1118,11 +1107,9 @@ function initNewMidiInput(deviceName) {
   }
 
   midiInputDevice.addListener("noteon", e => {
-    totalMidi++;
-
     const whiteNoteNumberFromBase = calculateNoteNumberFromName(e.note.name, e.note.octave);
 
-    const channel = channels[firstChannel("off")];
+    const channel = soundsArray[firstChannel("off")];
     if (channel !== undefined) {
       setFromMidi(channel, whiteNoteNumberFromBase);
       channel.source = "midi";
@@ -1154,11 +1141,9 @@ function initNewMidiInput(deviceName) {
   });
 
   midiInputDevice.addListener("noteoff", e => {
-    totalMidi--;
-
     const whiteNoteNumberFromBase = calculateNoteNumberFromName(e.note.name, e.note.octave);
 
-    const channel = channels[exactChannel("midi", whiteNoteNumberFromBase)];
+    const channel = soundsArray[exactChannel("midi", whiteNoteNumberFromBase)];
     if (channel !== undefined) {
       channel.source = "off";
       channel.properties = {};
@@ -1167,7 +1152,6 @@ function initNewMidiInput(deviceName) {
     }
     return false; // prevent any default behavior
   });
-
 }
 
 // Function to calculate the number value for a MIDI note
