@@ -7,7 +7,6 @@ let settingsFocused = false;
 let menuButtonFocused = false;
 
 // audio
-let audioStarted = false;
 let webMidiLibraryEnabled = false;
 
 // sound settings
@@ -138,12 +137,34 @@ window.setup = () => {
       }
     }
   });
+  document.addEventListener('touchcancel', () => {
+    // darken
+    fill("#00000090");
+    rect(-width/2, -height/2, width, height);
+    // release
+    releaseAllChannels();
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === 'visible') {
+      // console.log('browser document focused (again)');
+      // if (getAudioContext().state !== "running") {
+      //   releaseAllChannels();
+      //   window.draw();
+      // }
+    } else {
+      // console.log('lost focus');
+      fill("#00000090");
+      rect(-width/2, -height/2, width, height);
+      loop();
+    }
+  });
 
   // read the settings input if it changed and make changes
   settingsDiv.addEventListener("input", (event) => {
     const target = event.target;
-    stopAllChannels("midi");
-    stopAllChannels("kbd");
+    releaseAllChannels("midi");
+    releaseAllChannels("kbd");
     readSettingsInput(target);
   });
 
@@ -420,6 +441,7 @@ window.draw = () => {
   // text at base position showing base freq
   fill("white");
   textAlign(CENTER, CENTER);
+  textSize(12);
   text(scale.baseFrequency, layout.baseX + layout.columnWidth*0.5, layout.baseY - 2);
 
   const playingSteps = getStepsFromSoundsArray(soundsArray.filter(ch => ch.source !== "off" && ch.source !== "release"));
@@ -437,13 +459,19 @@ window.draw = () => {
     text(displayText, 46,  100 + index * 20);
   });
 
-  //overlay if audio not started
-  if (!audioStarted) {
+  if (getAudioContext().state !== "running") {
     fill("#00000090");
     rect(0, 0, width, height);
     fill("white");
     textAlign(CENTER, CENTER);
-    text("CLICK OR TAP TO START", width/2, height/2);
+    textSize(18);
+    text("Bendboard", width/2, height/2 - 140);
+    textSize(13);
+    text("Audio is " + getAudioContext().state + ".", width/2, height/2 - 20);
+    text("Click or tap to resume.", width/2, height/2);
+    killAllChannels();
+  } else {
+    noLoop();
   }
 
   pop();
@@ -924,7 +952,7 @@ function outsideCanvas(x, y) {
 
 function handleTouchStart(event) {
   event.preventDefault();
-  if (initializeAudioStep()) return;
+  if (checkResumingAudioContext()) return;
 
   event.changedTouches.forEach((touch) => {
     const id = touch.identifier;
@@ -968,7 +996,7 @@ function handleTouchEnd(event) {
 
       // if there are playing touches still, but none on the screen, stop all
       if (countChannelTypes().touch > 0 && event.touches.length === 0) {
-        stopAllChannels("touch");
+        releaseAllChannels("touch");
       }
       
       window.draw();
@@ -999,7 +1027,7 @@ window.mouseDragged = () => {
 };
 
 window.mousePressed = () => {
-  if (initializeAudioStep()) return;
+  if (checkResumingAudioContext()) return;
   if (settingsFocused || menuButtonFocused) return;
   if (!ignoreTouchEvents) return
   if (outsideCanvas(mouseX, mouseY)) return;
@@ -1023,17 +1051,19 @@ window.mouseReleased = () => {
   }
 }
 
-function initializeAudioStep() {
-  if (!audioStarted) {
-    userStartAudio();
-    audioStarted = true;
-    window.draw();
+function checkResumingAudioContext() {
+  if (getAudioContext().state !== "running") {
+    killAllChannels();
+    userStartAudio().then(
+      print("User audio should now be started! (check: "+ getAudioContext().state+")"),
+      loop()
+    );
     return true;
   }
   return false;
 }
 
-function stopAllChannels(type) {
+function releaseAllChannels(type) {
   if (type === undefined) {
     // just stop all
     soundsArray.forEach((channel) => {
@@ -1048,9 +1078,17 @@ function stopAllChannels(type) {
   } 
 } 
 
+function killAllChannels() {
+  soundsArray.forEach((channel) => {
+    channel.source = "off";
+    channel.properties = {};
+    channel.synth.stop();
+  });
+}
+
 
 window.keyPressed = () => {
-  if (initializeAudioStep()) return;
+  if (checkResumingAudioContext()) return;
   if (settingsFocused) return;
   if (document.activeElement.type !== undefined) return
 
