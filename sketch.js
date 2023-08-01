@@ -413,22 +413,67 @@ window.draw = () => {
   textAlign(CENTER, CENTER);
   text(scale.baseFrequency, layout.baseX + layout.columnWidth*0.5, layout.baseY - 2);
 
-  // grab playing notes
-  const playingSteps = channels.filter(ch => ch.source !== "off" && (!isNaN(ch.properties.midiOffset) || !isNaN(ch.properties.kbdstep)));
+  // grab playing pitches
+  const playingChannels = channels.filter(ch => ch.source !== "off");
+  // get the exact step that is playing with kbd/midi, or that is closest in cents
+  // dist parameter describes how close a played pitch is to the nearest step
+  const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+  let playingSteps = playingChannels.map(ch => {
+    if (!isNaN(ch.properties.midiOffset)) return {offset: ch.properties.midiOffset, dist: 0};
+    if (!isNaN(ch.properties.kbdstep)) return {offset: ch.properties.kbdstep, dist: 0};
+
+    const playedCents = ch.properties.cents;
+    const octave = Math.floor(playedCents / periodCents);
+
+    const inOctaveCents = wrapNumber(playedCents, 0, periodCents);
+    if (inOctaveCents == periodCents) return {offset: octave * scale.cents.length, dist: 0};
+
+    const closestStep = findClosestIndex([...scale.cents, periodCents], inOctaveCents) + octave * scale.cents.length;
+    const distanceToStep = Math.abs(playedCents - stepOffsetToCents(closestStep));
+    return {offset: closestStep, dist: distanceToStep};
+  });
+
+  function findClosestIndex(sortedArray, target) {
+    return sortedArray.reduce(
+      (acc, curr, index) =>
+        Math.abs(curr - target) < Math.abs(sortedArray[acc] - target) ? index : acc,
+      0
+    );
+  }
+
+  //text(`${JSON.stringify(playingSteps)}`, width/2, 20);
+
+  // get fractions for all the played steps
   let fractionItems = [];
 
-  if (playingSteps.length > 0) {
+  // only if nothing is playing, show the full scale instead
+  if (playingSteps.length === 0) {
+    scale.sortedFractions.forEach((ratioArr, index) => {
+      const ratioString = ratioArr[0] + "/" + ratioArr[1];
+      const cent = scale.cents[index % scale.cents.length];
+      const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+      const hue = percentOfOctave * 360;
+      fractionItems.push({step: index, ratioString, hue, opacity: 1});
+    });
+  } else if (playingSteps.length === 1) {
+    const cent = scale.cents[wrapNumber(playingSteps[0].offset, 0, scale.cents.length-1)]; 
+    const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+    const hue = percentOfOctave * 360;
+    const opacity = map(playingSteps[0].dist, 0, scale.maxSnapToCents, 1, 0.3, true);
+    fractionItems.push({step: playingSteps[0].offset, ratioString: undefined, hue, opacity});
+  } else {
     // from lowest to highest, relative to lowest step
-    const offsetSteps = playingSteps.map(ch => ch.properties.midiOffset ?? ch.properties.kbdstep);
-    offsetSteps.sort((a, b) => a - b);
+    playingSteps.sort((a, b) => a.offset - b.offset);
 
     // ratio of lowest step to start of that octave
-    const baseStepOctave = Math.floor(offsetSteps[0] / scale.cents.length);
-    const baseStep = offsetSteps[0] - baseStepOctave * scale.cents.length;
+    const baseStepOctave = Math.floor(playingSteps[0].offset / scale.cents.length);
+    const baseStep = playingSteps[0].offset - baseStepOctave * scale.cents.length;
     const baseStepRatio = scale.sortedFractions[baseStep];
 
     // get ratios of steps relative to that lowest step
-    offsetSteps.forEach((step) => {
+    playingSteps.forEach((stepObj) => {
+
+      const step = stepObj.offset;
 
       // ratio of the selected step to start of the octave it is in
       const stepOctave = Math.floor(step / scale.cents.length);
@@ -457,27 +502,19 @@ window.draw = () => {
       const cent = scale.cents[stepInOctave];
       const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
       const hue = percentOfOctave * 360;
-      fractionItems.push({step, ratioString, hue});
-    });
-    
-    //text(`${JSON.stringify(offsetSteps)}`, width - 20, height - 20);
-  } else {
-    // show full scale instead
-    scale.sortedFractions.forEach((ratioArr, index) => {
-      const ratioString = ratioArr[0] + "/" + ratioArr[1];
-      const cent = scale.cents[index % scale.cents.length];
-      const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
-      const hue = percentOfOctave * 360;
-      fractionItems.push({step: index, ratioString, hue});
+      const opacity = map(stepObj.dist, 0, scale.maxSnapToCents, 1, 0.3, true);
+      fractionItems.push({step, ratioString, hue, opacity});
     });
   }
 
   // display under the octave circle
   fractionItems.forEach((item, index) => {
-    fill("#00000090");
-    ellipse(46, 102 + index * 20, item.ratioString.length*10, 18);
-    fill(chroma.oklch(0.8, 0.2, item.hue).hex()); // Set line color
-    text(`${item.ratioString}`, 46,  100 + index * 20);
+    const displayText = item.ratioString ?? wrapNumber(item.step, 0, scale.cents.length-1).toString() ?? "?";
+    fill(chroma("black").alpha(item.opacity * 0.6).hex());
+    ellipse(46, 102 + index * 20, Math.max(displayText.length*10, 18), 18);
+    const fillHex = chroma.oklch(0.8, 0.2, item.hue).alpha(item.opacity).hex();
+    fill(fillHex);
+    text(displayText, 46,  100 + index * 20);
   });
 
 
@@ -581,15 +618,8 @@ function setFromKbd(channel, keyIndex) {
 
   channel.properties.kbdstep = keyIndex;
 
-  const setCentsFromScaleIndex = (index) => {
-    const repetitionIndex = Math.floor(index / scale.cents.length);
-    const scaleStepCents = scale.cents[index % scale.cents.length];
-    const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
-    return repetitionIndex * periodCents + scaleStepCents;
-  }
-
   // set new cents
-  const channelCents = setCentsFromScaleIndex(keyIndex);
+  const channelCents = stepOffsetToCents(keyIndex);
   channel.properties.cents = channelCents;
 
   // set freq
@@ -600,16 +630,8 @@ function setFromMidi(channel, midiOffset) {
 
   channel.properties.midiOffset = midiOffset;
 
-  const setCentsFromOffset = (offset) => {
-    const repetitionIndex = Math.floor(offset / scale.cents.length);
-    const scaleIndex = offset - repetitionIndex * scale.cents.length;
-    const scaleStepCents = scale.cents[scaleIndex];
-    const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
-    return repetitionIndex * periodCents + scaleStepCents;
-  }
-
   // set new cents
-  const channelCents = setCentsFromOffset(midiOffset);
+  const channelCents = stepOffsetToCents(midiOffset);
   channel.properties.cents = channelCents;
 
   // set freq
@@ -807,6 +829,14 @@ function outsideCanvas(x, y) {
 function changeSnapping() {
   scale.maxSnapToCents += 15;
   scale.maxSnapToCents = scale.maxSnapToCents % 60;
+}
+
+function stepOffsetToCents(offset) {
+  const repetitionIndex = Math.floor(offset / scale.cents.length);
+  const scaleIndex = offset - repetitionIndex * scale.cents.length;
+  const scaleStepCents = scale.cents[scaleIndex];
+  const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+  return repetitionIndex * periodCents + scaleStepCents;
 }
 
 // distance between two frequencies in cents
@@ -1168,27 +1198,3 @@ function calculateNoteNumberFromName(note, octave) {
   
   return null; // Return null for invalid notes or black keys
 }
-
-// function enableWebGL2(p) {
-//   p.RendererGL.prototype._initContext = function () {
-//     try {
-//       this.drawingContext =
-//         this.canvas.getContext("webgl2", this._pInst._glAttributes) ||
-//         this.canvas.getContext("webgl", this._pInst._glAttributes) ||
-//         this.canvas.getContext("experimental-webgl", this._pInst._glAttributes)
-//       if (this.drawingContext === null) {
-//         throw new Error("Error creating webgl context")
-//       } else {
-//         const gl = this.drawingContext
-//         gl.enable(gl.DEPTH_TEST)
-//         gl.depthFunc(gl.LEQUAL)
-//         gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
-//         this._viewport = this.drawingContext.getParameter(this.drawingContext.VIEWPORT)
-//         // gl.enable(gl.SAMPLE_COVERAGE)
-//         // gl.sampleCoverage(0.2, true)
-//       }
-//     } catch (er) {
-//       throw er
-//     }
-//   }
-// }
