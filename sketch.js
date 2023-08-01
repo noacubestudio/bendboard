@@ -316,8 +316,7 @@ function sortedFractionArrsFromRatioChord(ratioChordArr, modeNum) {
   const fractionsArr = ratioChordArr.map((numerator) => [numerator, denominator])
   
   // use the mode number to essentially change which pitch is 1/1
-  const maxModeNum = fractionsArr.length-1; // this should realistically take the actual number of unique notes and the right order too...
-  modeNum = wrapNumber(modeNum, 0, maxModeNum);
+  modeNum = wrapNumber(modeNum, 0, fractionsArr.length);
   const transposedArr = transposeScale(fractionsArr, fractionsArr[modeNum]);
   const modeMovedArr = moveUnderNextPeriod(transposedArr, modeNum, scale.periodRatio);
 
@@ -423,12 +422,10 @@ window.draw = () => {
     if (!isNaN(ch.properties.kbdstep)) return {offset: ch.properties.kbdstep, dist: 0};
 
     const playedCents = ch.properties.cents;
-    const octave = Math.floor(playedCents / periodCents);
-
+    let octave = Math.floor(playedCents / periodCents);
     const inOctaveCents = wrapNumber(playedCents, 0, periodCents);
-    if (inOctaveCents == periodCents) return {offset: octave * scale.cents.length, dist: 0};
-
-    const closestStep = findClosestIndex([...scale.cents, periodCents], inOctaveCents) + octave * scale.cents.length;
+    const closestStepInOctave = findClosestIndex([...scale.cents, periodCents], inOctaveCents);
+    const closestStep = closestStepInOctave + octave * scale.cents.length;
     const distanceToStep = Math.abs(playedCents - stepOffsetToCents(closestStep));
     return {offset: closestStep, dist: distanceToStep};
   });
@@ -441,7 +438,7 @@ window.draw = () => {
     );
   }
 
-  //text(`${JSON.stringify(playingSteps)}`, width/2, 20);
+  // text(`${JSON.stringify(playingSteps)}`, width/2, 20);
 
   // get fractions for all the played steps
   let fractionItems = [];
@@ -456,11 +453,13 @@ window.draw = () => {
       fractionItems.push({step: index, ratioString, hue, opacity: 1});
     });
   } else if (playingSteps.length === 1) {
-    const cent = scale.cents[wrapNumber(playingSteps[0].offset, 0, scale.cents.length-1)]; 
+    const ratioArr = scale.sortedFractions[wrapNumber(playingSteps[0].offset, 0, scale.cents.length)];
+    const ratioString = ratioArr[0] + "/" + ratioArr[1];
+    const cent = scale.cents[wrapNumber(playingSteps[0].offset, 0, scale.cents.length)]; 
     const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
     const hue = percentOfOctave * 360;
     const opacity = map(playingSteps[0].dist, 0, scale.maxSnapToCents, 1, 0.3, true);
-    fractionItems.push({step: playingSteps[0].offset, ratioString: undefined, hue, opacity});
+    fractionItems.push({step: playingSteps[0].offset, ratioString, hue, opacity});
   } else {
     // from lowest to highest, relative to lowest step
     playingSteps.sort((a, b) => a.offset - b.offset);
@@ -509,7 +508,7 @@ window.draw = () => {
 
   // display under the octave circle
   fractionItems.forEach((item, index) => {
-    const displayText = item.ratioString ?? wrapNumber(item.step, 0, scale.cents.length-1).toString() ?? "?";
+    const displayText = item.ratioString ?? wrapNumber(item.step, 0, scale.cents.length).toString() ?? "?";
     fill(chroma("black").alpha(item.opacity * 0.6).hex());
     ellipse(46, 102 + index * 20, Math.max(displayText.length*10, 18), 18);
     const fillHex = chroma.oklch(0.8, 0.2, item.hue).alpha(item.opacity).hex();
@@ -855,7 +854,7 @@ function easeInCirc(x) {
 }
 
 function wrapNumber(num, min, max) {
-  const range = max - min + 1;
+  const range = max - min;
   const wrappedNum = ((num - min) % range + range) % range + min;
   return wrappedNum;
 }
