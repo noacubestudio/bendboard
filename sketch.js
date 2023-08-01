@@ -611,7 +611,7 @@ function getFractionsDisplayFromPlayingSteps(playingSteps) {
 }
 
 
-function setFromScreenXY(channel, x, y, initType, id) {
+function setChannelFreqFromCoords(channel, x, y, initType, id) {
 
   // save last
   channel.properties.lastCents = channel.properties.cents;
@@ -665,7 +665,12 @@ function setCentsFromScreenXY(channel, x, y) {
 
   // rounded to left column edge => rounded down.
   // if playing in the base column, this will be 0.
-  const columnOffsetX = Math.floor(x / layout.columnWidth);
+  let columnOffsetX = Math.floor(x / layout.columnWidth);
+  // add between 0-1 up or down if close to the edge for smooth transition
+  const marginPercent = 0.05;
+  const inColumnPercent = wrapNumber(x, 0, layout.columnWidth) / layout.columnWidth;
+  if (inColumnPercent < marginPercent) columnOffsetX += map(inColumnPercent, 0.0, marginPercent, -0.5, 0);
+  if (inColumnPercent > 1-marginPercent) columnOffsetX += map(inColumnPercent, 1-marginPercent, 1.0, 0, 0.5);
 
   // the x offset changes the cents based on the offset above
   const centsFromX = columnOffsetX * layout.nextColumnOffsetCents;
@@ -928,7 +933,7 @@ function handleTouchStart(event) {
     
     const channel = soundsArray[firstChannel("off")];
     if (channel !== undefined) {
-      setFromScreenXY(channel, x, y, "touch", id);
+      setChannelFreqFromCoords(channel, x, y, "touch", id);
 
       window.draw();
     }
@@ -944,7 +949,7 @@ function handleTouchMove(event) {
     
     const channel = soundsArray[exactChannel("touch", id)];
     if (channel !== undefined) {
-      setFromScreenXY(channel, x, y);
+      setChannelFreqFromCoords(channel, x, y);
   
       window.draw();
     }
@@ -987,7 +992,7 @@ window.mouseDragged = () => {
 
   const channel = soundsArray[firstChannel("mouse")];
   if (channel !== undefined) {
-    setFromScreenXY(channel, mouseX, mouseY);
+    setChannelFreqFromCoords(channel, mouseX, mouseY);
 
     window.draw();
   }
@@ -1001,7 +1006,7 @@ window.mousePressed = () => {
   
   const channel = soundsArray[firstChannel("off")];
   if (channel !== undefined) {
-    setFromScreenXY(channel, mouseX, mouseY, "mouse");
+    setChannelFreqFromCoords(channel, mouseX, mouseY, "mouse");
 
     window.draw();
   }
