@@ -10,7 +10,6 @@ let usingMouse = false; //!(window.matchMedia('(pointer: coarse)').matches || na
 let audioStarted = false;
 let webMidiLibraryEnabled = false;
 
-let totalKbd = 0;
 let totalTouches = 0;
 let totalMidi = 0;
 
@@ -1045,8 +1044,6 @@ window.keyPressed = () => {
   const keyIndex = "1234567890".indexOf(key);
   if (keyIndex === -1) return;
 
-  totalKbd++;
-
   const channel = channels[firstChannel("off")];
   if (channel !== undefined) {
     setFromKbd(channel, keyIndex);
@@ -1057,13 +1054,8 @@ window.keyPressed = () => {
 }
 
 window.keyReleased = () => {
-  if (settingsFocused) return;
-  if (document.activeElement.type !== undefined) return
-
   const keyIndex = "1234567890".indexOf(key);
   if (keyIndex === -1) return;
-
-  totalKbd--;
 
   const channel = channels[exactChannel("kbd", keyIndex)];
   if (channel !== undefined) {
@@ -1072,6 +1064,8 @@ window.keyReleased = () => {
     channel.synth.stop();
     window.draw();
   }
+  if (settingsFocused) return;
+  if (document.activeElement.type !== undefined) return;
   return false; // prevent any default behavior
 }
 
