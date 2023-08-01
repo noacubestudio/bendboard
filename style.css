@@ -62,12 +62,12 @@ button {
   padding: 10px;
   margin-top: 6px;
 
-  background-color: #33333370;
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
+  background-color: #202020D0;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
 
   border-radius: 12px;
-  color: #ffffffa0;
+  color: #ffffff76;
 }
 
 .input-group {
@@ -86,10 +86,10 @@ button {
 .input-field {
   font-family: monospace;
   border: none;
-  background-color: #333333B0;
-  color: #ffffff;
+  background-color: #00000090;
+  color: #ffffffE0;
   flex: 1;
-  width: 350px;
+  width: 340px;
   padding: 6px 10px;
   font-size: 15px;
   border-radius: 6px;
