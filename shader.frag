@@ -16,7 +16,7 @@ uniform float u_stepsBlueArray[128];
 uniform float u_stepsGreenArray[128];
 uniform int u_stepsYarrayLength;
 
-uniform float u_playYarray[10];
+uniform float u_playYarray[16];
 uniform int u_playYarrayLength;
 
 uniform vec2 u_circlePos;

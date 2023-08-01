@@ -11,15 +11,23 @@ let audioStarted = false;
 let webMidiLibraryEnabled = false;
 
 // sound settings
-let lpFilter; let delayFilter;
-let delayWet = 0.7;
-let waveform = "sawtooth";
+const soundconfig = {
+  filter: undefined,
+  delay: undefined,
+  delayWet: 0.2,
+  waveform: "sawtooth",
+  maxAmp: 0.5,
+  attackDur: 0.05, // in seconds
+  releaseDur: 0.3 // in seconds
+}
+
 
 const soundsArray = [];
-// initialized with 10 voices, 
+// initialized with 16 voices, 
 // each contains:
 // - synth object
-// - source type: off, kbd, touch, mouse (off = filled again first before starting a new synth)
+// - source type: 
+//   off (unused), kbd, touch, mouse, release (only sound still fading out)
 // - properties: cents (from basenote), step, etc...
 
 const layout = {
@@ -95,8 +103,8 @@ window.setup = () => {
     { name: 'height', label: 'Column height (px per cent)', initialValue: layout.centsToPixels, type: 'number', placeholder: '0.5, 0.75', step: '0.05' },
     { name: 'columnpx', label: 'Column width (px)', initialValue: layout.columnWidth, type: 'number', placeholder: '50' },
     { name: 'snaprange', label: 'Snapping height (cents)', initialValue: scale.maxSnapToCents, type: 'number', placeholder: '0, 30, 50', step: '5' },
-    { name: 'waveform', label: 'Waveform', initialValue: waveform, type: 'text', placeholder: 'sine, square, triangle, sawtooth' },
-    { name: 'delay', label: 'Delay dry/wet', initialValue: delayWet, type: 'number', placeholder: '0, 0.7, 1.0', step: '0.1' },
+    { name: 'waveform', label: 'Waveform', initialValue: soundconfig.waveform, type: 'text', placeholder: 'sine, square, triangle, sawtooth' },
+    { name: 'delay', label: 'Delay dry/wet', initialValue: soundconfig.delayWet, type: 'number', placeholder: '0, 0.7, 1.0', step: '0.1' },
     { name: 'midiname', label: 'MIDI IN • Search device name', initialValue: midiSettings.deviceName, type: 'text', placeholder: 'Check console (F12) for options' },
     { name: 'midioctave', label: 'MIDI IN • Starting octave', initialValue: midiSettings.baseOctave, type: 'number', placeholder: '2, 3, 4' },
     // Add more objects as needed
@@ -152,29 +160,29 @@ window.setup = () => {
 
   // CONNECT AUDIO NODES
 
-  lpFilter = new p5.BandPass();
-  lpFilter.res(1);
-  lpFilter.freq(220);
+  soundconfig.filter = new p5.BandPass();
+  soundconfig.filter.res(1);
+  soundconfig.filter.freq(220);
 
   // reverb = new p5.Reverb();
   // reverb.disconnect();
   // reverb.process(lpFilter, 1.5, 2);
   // reverb.connect(lpFilter);
 
-  delayFilter = new p5.Delay();
-  delayFilter.process(lpFilter, 0.18, .6, 2300);
-  delayFilter.setType(1);
-  delayFilter.drywet(delayWet);
+  soundconfig.delay = new p5.Delay();
+  soundconfig.delay.process(soundconfig.filter, 0.18, .6, 2300);
+  soundconfig.delay.setType(1);
+  soundconfig.delay.drywet(soundconfig.delayWet);
 
   // initialize all channels
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 16; i++) {
     let synth = new p5.Oscillator();
 
     synth.disconnect();
-    synth.connect(lpFilter);
-    synth.setType(waveform);
+    synth.connect(soundconfig.filter);
+    synth.setType(soundconfig.waveform);
     synth.freq(scale.baseFrequency)
-    synth.amp(0.5);
+    synth.amp(0);
 
     soundsArray.push({synth, source: "off", properties: {}});
   }
@@ -284,16 +292,16 @@ function readSettingsInput(target) {
       break;
     case "waveform":
       if (["sine", "square", "triangle","sawtooth"].includes(value)) {
-        waveform = value;
+        soundconfig.waveform = value;
         for (let i = 0; i < soundsArray.length; i++) {
-          soundsArray[i].synth.setType(waveform);
+          soundsArray[i].synth.setType(soundconfig.waveform);
         }
       }
       break;
     case "delay":
       if (value > 0) {
-        delayWet = value;
-        delayFilter.drywet(delayWet);
+        soundconfig.delayWet = value;
+        soundconfig.delay.drywet(soundconfig.delayWet);
       }
       break;
     case "midiname":
@@ -414,7 +422,7 @@ window.draw = () => {
   textAlign(CENTER, CENTER);
   text(scale.baseFrequency, layout.baseX + layout.columnWidth*0.5, layout.baseY - 2);
 
-  const playingSteps = getStepsFromSoundsArray(soundsArray.filter(ch => ch.source !== "off"));
+  const playingSteps = getStepsFromSoundsArray(soundsArray.filter(ch => ch.source !== "off" && ch.source !== "release"));
   // text(`${JSON.stringify(playingSteps)}`, width/2, 20);
 
   const fractionItems = getFractionsDisplayFromPlayingSteps(playingSteps);
@@ -489,7 +497,7 @@ function drawShader() {
   keyboardShader.setUniform("u_stepsGreenArray", stepsGreenArray);
   keyboardShader.setUniform("u_stepsBlueArray", stepsBlueArray);
   keyboardShader.setUniform("u_stepsYarrayLength", stepsYArray.length);
-  const channelCents = soundsArray.filter(ch => ch.source !== "off" && ch.properties.cents !== undefined);
+  const channelCents = soundsArray.filter(ch => ch.source !== "off" && ch.source !== "release" && ch.properties.cents !== undefined);
   const playYArray = channelCents.map(ch => yTo01(ch.properties.cents * layout.centsToPixels));
   keyboardShader.setUniform("u_playYarray", playYArray);
   keyboardShader.setUniform("u_playYarrayLength", playYArray.length);
@@ -620,7 +628,7 @@ function setFromScreenXY(channel, x, y, initType, id) {
   if (initType !== undefined) initChannel(channel, initType, id);
 }
 
-function setFromKbd(channel, keyIndex) {
+function setChannelFreqFromKbd(channel, keyIndex) {
 
   channel.properties.kbdstep = keyIndex;
 
@@ -632,7 +640,7 @@ function setFromKbd(channel, keyIndex) {
   channel.synth.freq(frequency(scale.baseFrequency, channelCents));
 }
 
-function setFromMidi(channel, midiOffset) {
+function setChannelFreqFromMidi(channel, midiOffset) {
 
   channel.properties.midiOffset = midiOffset;
 
@@ -766,6 +774,25 @@ function initChannel(channel, type, id) {
   channel.source = type;
   if (type === "touch") channel.properties.id = id;
   channel.synth.start();
+  channel.synth.amp(0);
+  channel.synth.amp(soundconfig.maxAmp, soundconfig.attackDur, 0);
+}
+
+function releaseChannel(channel, releaseDuration) {
+  channel.source = "release";
+  channel.properties = {};
+  channel.synth.amp(soundconfig.maxAmp); //weird hack, why doesnt it remember?
+  channel.synth.amp(0, releaseDuration, 0); // fade back down
+
+  // Schedule the removal of the synth after the fade-out duration
+  setTimeout(() => {
+
+    channel.synth.stop();
+    channel.source = "off";
+
+  }, releaseDuration * 1100);
+  // fadeDuration converted from seconds to milliseconds
+  // added a bit of extra time in order to not stop right when it SHOULD reach 0
 }
 
 function firstChannel(source) {
@@ -932,9 +959,7 @@ function handleTouchEnd(event) {
     
     const channel = soundsArray[exactChannel("touch", id)];
     if (channel !== undefined) {
-      channel.source = "off";
-      channel.properties = {};
-      channel.synth.stop();
+      releaseChannel(channel, soundconfig.releaseDur);
 
       // if there are playing touches still, but none on the screen, stop all
       if (countChannelTypes().touch > 0 && event.touches.length === 0) {
@@ -987,9 +1012,7 @@ window.mouseReleased = () => {
   
   const channel = soundsArray[firstChannel("mouse")];
   if (channel !== undefined) {
-    channel.source = "off";
-    channel.properties = {};
-    channel.synth.stop();
+    releaseChannel(channel, soundconfig.releaseDur);
     
     window.draw();
   }
@@ -1009,16 +1032,12 @@ function stopAllChannels(type) {
   if (type === undefined) {
     // just stop all
     soundsArray.forEach((channel) => {
-      channel.properties = {};
-      channel.source = "off";
-      channel.synth.stop();
+      releaseChannel(channel, soundconfig.releaseDur);
     });
   } else {
     soundsArray.forEach((channel) => {
       if (channel.source === type) {
-        channel.properties = {};
-        channel.source = "off";
-        channel.synth.stop();
+        releaseChannel(channel, soundconfig.releaseDur);
       }
     });
   } 
@@ -1035,9 +1054,8 @@ window.keyPressed = () => {
 
   const channel = soundsArray[firstChannel("off")];
   if (channel !== undefined) {
-    setFromKbd(channel, keyIndex);
-    channel.source = "kbd";
-    channel.synth.start();
+    setChannelFreqFromKbd(channel, keyIndex);
+    initChannel(channel, "kbd");
     window.draw();
   }
 }
@@ -1048,9 +1066,7 @@ window.keyReleased = () => {
 
   const channel = soundsArray[exactChannel("kbd", keyIndex)];
   if (channel !== undefined) {
-    channel.source = "off";
-    channel.properties = {};
-    channel.synth.stop();
+    releaseChannel(channel, soundconfig.releaseDur);
     window.draw();
   }
   if (settingsFocused) return;
@@ -1111,9 +1127,8 @@ function initNewMidiInput(deviceName) {
 
     const channel = soundsArray[firstChannel("off")];
     if (channel !== undefined) {
-      setFromMidi(channel, whiteNoteNumberFromBase);
-      channel.source = "midi";
-      channel.synth.start();
+      setChannelFreqFromMidi(channel, whiteNoteNumberFromBase);
+      initChannel(channel, "midi");
       window.draw();
     }
   });
