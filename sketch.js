@@ -82,6 +82,7 @@ window.setup = () => {
 
   // set density
   density = displayDensity(); // 1
+  if (density > 2) density = 1;
   pixelDensity(density);
   print("Display density:", density);
   print("Handling touch events. Switches to mouse events on hover.")
@@ -469,6 +470,7 @@ window.draw = () => {
     textSize(13);
     text("Audio is " + getAudioContext().state + ".", width/2, height/2 - 20);
     text("Click or tap to resume.", width/2, height/2);
+    //text(INFO, width/2, height/2 + 20);
     killAllChannels();
   } else {
     noLoop();
