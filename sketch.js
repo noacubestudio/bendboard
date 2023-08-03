@@ -42,6 +42,7 @@ const layout = {
 const scale = {
   baseFrequency: 110.0,
   maxSnapToCents: 40,
+  alwaysForceSnap: false,
   equalDivisions: 12,
   periodRatio: [2, 1], // range used for scales and EDO
   scaleRatios: [24, 27, 30, 32, 36, 40, 45, 48],
@@ -750,11 +751,16 @@ function setCentsFromScreenXY(channel, x, y) {
   // rounded to left column edge => rounded down.
   // if playing in the base column, this will be 0.
   let columnOffsetX = Math.floor(x / layout.columnWidth);
+  
+
+  // COOL, BUT PROBABLY NEEDS BETTER VISUAL AND ALSO PREVENTS JUMP DETECTION FOR SNAPPING...
+  
   // add between 0-1 up or down if close to the edge for smooth transition
-  const marginPercent = 0.05;
-  const inColumnPercent = wrapNumber(x, 0, layout.columnWidth) / layout.columnWidth;
-  if (inColumnPercent < marginPercent) columnOffsetX += map(inColumnPercent, 0.0, marginPercent, -0.5, 0);
-  if (inColumnPercent > 1-marginPercent) columnOffsetX += map(inColumnPercent, 1-marginPercent, 1.0, 0, 0.5);
+  // const marginPercent = 0.05;
+  // const inColumnPercent = wrapNumber(x, 0, layout.columnWidth) / layout.columnWidth;
+  // if (inColumnPercent < marginPercent) columnOffsetX += map(inColumnPercent, 0.0, marginPercent, -0.5, 0);
+  // if (inColumnPercent > 1-marginPercent) columnOffsetX += map(inColumnPercent, 1-marginPercent, 1.0, 0, 0.5);
+
 
   // the x offset changes the cents based on the offset above
   const centsFromX = columnOffsetX * layout.nextColumnOffsetCents;
@@ -777,9 +783,16 @@ function setCentsFromScreenXY(channel, x, y) {
 }
 
 function updateSnappingForChannel(channel, cents) {
-  const lastCents = channel.properties.lastCents;
-  const completelySnappedCents = getCompletelySnappedCents(cents, lastCents);
+
+  const completelySnappedCents = getCompletelySnappedCents(cents);
   
+  if (scale.alwaysForceSnap) {
+    channel.properties.snapTargetCents = completelySnappedCents;
+    channel.properties.snapStrength = 100;
+    return;
+  }
+
+  const lastCents = channel.properties.lastCents;
   if (lastCents === undefined || Math.abs(lastCents-cents) > scale.maxSnapToCents) {
     // jumped to value outside of snap range
     // start snap to something in range
@@ -851,7 +864,7 @@ function getCompletelySnappedCents(c) {
   }
 
   let snapDistance = Math.round(playedInOctaveCents - snapToCentsInOctave);
-  if (Math.abs(snapDistance) < scale.maxSnapToCents) {
+  if (Math.abs(snapDistance) < scale.maxSnapToCents || scale.alwaysForceSnap) {
     c -= snapDistance;
     return c;
   }

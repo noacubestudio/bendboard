@@ -102,3 +102,18 @@ button {
 #bottom-container * {
   position: relative;
 }
+
+@media (orientation: portrait) and (max-width: 767px) {
+  #top-container {
+    flex-direction: column;
+  }
+  #settingsDiv {
+    position: absolute;
+    top: 44dvh;
+    max-height: 50dvh;
+    width: calc(100vw - 20px);
+  }
+  .input-field {
+    width: calc(100vw - 40px);
+  }
+}
