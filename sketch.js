@@ -448,11 +448,14 @@ window.draw = () => {
   const playingSteps = getStepsFromSoundsArray(soundsArray.filter(ch => ch.source !== "off" && ch.source !== "release"));
   // text(`${JSON.stringify(playingSteps)}`, width/2, 20);
 
-  const fractionItems = getFractionsDisplayFromPlayingSteps(playingSteps);
+  // return displayStrings, color and opacity as well as the step per item
+  const playingStepsLabels = (scale.sortedFractions.length > 0) 
+    ? getFractionsDisplayFromPlayingSteps(scale.sortedFractions, playingSteps) 
+    : getCentsDisplayFromPlayingSteps(scale.cents, playingSteps);
 
   // display under the octave circle
-  fractionItems.forEach((item, index) => {
-    const displayText = item.ratioString ?? wrapNumber(item.step, 0, scale.cents.length).toString() ?? "?";
+  playingStepsLabels.forEach((item, index) => {
+    const displayText = item.displayString ?? wrapNumber(item.step, 0, scale.cents.length).toString() ?? "?";
     fill(chroma("black").alpha(item.opacity * 0.6).hex());
     ellipse(46, 102 + index * 20, Math.max(displayText.length*10, 18), 18);
     const fillHex = chroma.oklch(0.8, 0.2, item.hue).alpha(item.opacity).hex();
@@ -572,26 +575,26 @@ function getStepsFromSoundsArray(playingChannels) {
 }
 
 // get fractions for all the played steps
-function getFractionsDisplayFromPlayingSteps(playingSteps) {
+function getFractionsDisplayFromPlayingSteps(scaleFractions, playingSteps) {
   let fractionItems = [];
 
   // only if nothing is playing, show the full scale instead
   if (playingSteps.length === 0) {
-    scale.sortedFractions.forEach((ratioArr, index) => {
-      const ratioString = ratioArr[0] + "/" + ratioArr[1];
+    scaleFractions.forEach((ratioArr, index) => {
+      const displayString = ratioArr[0] + "/" + ratioArr[1];
       const cent = scale.cents[index % scale.cents.length];
       const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
       const hue = percentOfOctave * 360;
-      fractionItems.push({step: index, ratioString, hue, opacity: 1});
+      fractionItems.push({step: index, displayString, hue, opacity: 1});
     });
   } else if (playingSteps.length === 1) {
-    const ratioArr = scale.sortedFractions[wrapNumber(playingSteps[0].offset, 0, scale.cents.length)];
-    const ratioString = ratioArr[0] + "/" + ratioArr[1];
+    const ratioArr = scaleFractions[wrapNumber(playingSteps[0].offset, 0, scale.cents.length)];
+    const displayString = ratioArr[0] + "/" + ratioArr[1];
     const cent = scale.cents[wrapNumber(playingSteps[0].offset, 0, scale.cents.length)]; 
     const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
     const hue = percentOfOctave * 360;
     const opacity = map(playingSteps[0].dist, 0, scale.maxSnapToCents, 1, 0.3, true);
-    fractionItems.push({step: playingSteps[0].offset, ratioString, hue, opacity});
+    fractionItems.push({step: playingSteps[0].offset, displayString, hue, opacity});
   } else {
     // from lowest to highest, relative to lowest step
     playingSteps.sort((a, b) => a.offset - b.offset);
@@ -599,7 +602,7 @@ function getFractionsDisplayFromPlayingSteps(playingSteps) {
     // ratio of lowest step to start of that octave
     const baseStepOctave = Math.floor(playingSteps[0].offset / scale.cents.length);
     const baseStep = playingSteps[0].offset - baseStepOctave * scale.cents.length;
-    const baseStepRatio = scale.sortedFractions[baseStep];
+    const baseStepRatio = scaleFractions[baseStep];
 
     // get ratios of steps relative to that lowest step
     playingSteps.forEach((stepObj) => {
@@ -609,7 +612,7 @@ function getFractionsDisplayFromPlayingSteps(playingSteps) {
       // ratio of the selected step to start of the octave it is in
       const stepOctave = Math.floor(step / scale.cents.length);
       const stepInOctave = step - stepOctave * scale.cents.length;
-      const stepRatio = scale.sortedFractions[stepInOctave];
+      const stepRatio = scaleFractions[stepInOctave];
 
       // ratio to multiply by to account for octave delta from base
       const deltaOctaves = stepOctave - baseStepOctave;
@@ -627,17 +630,68 @@ function getFractionsDisplayFromPlayingSteps(playingSteps) {
         baseStepRatio[0] * stepRatio[1] * octavesRatio[1]
       );
 
-      const ratioString = finalRatio[0] + "/" + finalRatio[1];
+      const displayString = finalRatio[0] + "/" + finalRatio[1];
       // cents array is sorted just like the steps, so can be used here
       // color based on cents relative to total cents in the period
       const cent = scale.cents[stepInOctave];
       const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
       const hue = percentOfOctave * 360;
       const opacity = map(stepObj.dist, 0, scale.maxSnapToCents, 1, 0.3, true);
-      fractionItems.push({step, ratioString, hue, opacity});
+      fractionItems.push({step, displayString, hue, opacity});
     });
   }
   return fractionItems;
+}
+
+function getCentsDisplayFromPlayingSteps(scaleCents, playingSteps) {
+  let centItems = [];
+
+  // only if nothing is playing, show the full scale instead
+  if (playingSteps.length === 0) {
+    scaleCents.forEach((cent, index) => {
+      const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+      const hue = percentOfOctave * 360;
+      centItems.push({step: index, displayString: cleanRound(cent).toString(), hue, opacity: 1});
+    });
+  } else if (playingSteps.length === 1) {
+    const cent = scaleCents[wrapNumber(playingSteps[0].offset, 0, scale.cents.length)];
+    const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+    const hue = percentOfOctave * 360;
+    const opacity = map(playingSteps[0].dist, 0, scale.maxSnapToCents, 1, 0.3, true);
+    centItems.push({step: playingSteps[0].offset, displayString: cleanRound(cent).toString(), hue, opacity});
+  } else {
+    // from lowest to highest, relative to lowest step
+    playingSteps.sort((a, b) => a.offset - b.offset);
+
+    // cents of lowest step in that octave
+    const baseStepOctave = Math.floor(playingSteps[0].offset / scale.cents.length);
+    const baseStep = playingSteps[0].offset - baseStepOctave * scale.cents.length;
+    const baseStepCents = scaleCents[baseStep];
+
+    // get cents of steps relative to that lowest step
+    playingSteps.forEach((stepObj) => {
+
+      const step = stepObj.offset;
+
+      // cents of the selected step from start of the octave it is in
+      const stepOctave = Math.floor(step / scale.cents.length);
+      const stepInOctave = step - stepOctave * scale.cents.length;
+      const stepCents = scaleCents[stepInOctave];
+
+      // get the cents between this step and the base like this:
+      // subtract by the base step cents, add the step cents, add the octaves difference
+      const octavesBetween = stepOctave - baseStepOctave;
+      const displayCents = stepCents - baseStepCents + ratioToCents(scale.periodRatio[1], scale.periodRatio[0]) * octavesBetween;
+
+      // color based on cents relative to total cents in the period
+      const percentOfOctave = stepCents / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+      const hue = percentOfOctave * 360;
+      const opacity = map(stepObj.dist, 0, scale.maxSnapToCents, 1, 0.3, true);
+      centItems.push({step, displayString: cleanRound(displayCents).toString(), hue, opacity});
+    });
+  }
+
+  return centItems;
 }
 
 
