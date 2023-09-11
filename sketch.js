@@ -758,11 +758,12 @@ function setCentsFromScreenXY(channel, x, y) {
     const polarAngleNorm = (polarAngle * 0.5) / PI + 0.5;
 
     x = polarRadius;
-    y = polarAngleNorm;
+    y = polarAngleNorm; // goes from  1 to 0 clockwise starting from the top...
 
+    // effect of spiral on the radius - this works but I'm not totally sure why
+    x += y * (layout.columnWidth - (1 / layout.columnWidth));
+    // angle should modify cents - the range is same as between two columns in non spiral mode
     y *= layout.nextColumnOffsetCents;
-    x -= y / (layout.nextColumnOffsetCents * layout.columnWidth);
-    // not quite right yet, the radius, at least
   }
 
   // rounded to left column edge => rounded down.
