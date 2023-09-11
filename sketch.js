@@ -37,7 +37,9 @@ const layout = {
   nextColumnOffsetCents: 200,
   // width and height
   columnWidth: 54,
-  centsToPixels: 0.5 //0.75
+  centsToPixels: 0.5, //0.75
+  // special view mode(s)
+  spiralMode: false
 }
 const scale = {
   baseFrequency: 110.0,
@@ -101,7 +103,7 @@ window.setup = () => {
     { name: 'basefreq', label: 'Base frequency (Hz)', initialValue: scale.baseFrequency, type: 'number', placeholder: '25.50 (low A)' },
     { name: 'period', label: 'Repetition Interval (ratio)', initialValue: scale.periodRatio.join("/"), type: 'text', placeholder: '2/1' },
     { name: 'xoffset', label: 'Column offset (cents)', initialValue: layout.nextColumnOffsetCents, type: 'number', placeholder: '200 (a tone)' },
-    { name: 'height', label: 'Column height (px per cent)', initialValue: layout.centsToPixels, type: 'number', placeholder: '0.5, 0.75', step: '0.05' },
+    { name: 'height', label: 'Column height (px per cent)', initialValue: layout.centsToPixels, type: 'number', placeholder: '0.5, 0.75, 0 (circular)', step: '0.05' },
     { name: 'columnpx', label: 'Column width (px)', initialValue: layout.columnWidth, type: 'number', placeholder: '50' },
     { name: 'snaprange', label: 'Snapping height (cents)', initialValue: scale.maxSnapToCents, type: 'number', placeholder: '0, 30, 50', step: '5' },
     { name: 'waveform', label: 'Waveform', initialValue: soundconfig.waveform, type: 'text', placeholder: 'sine, square, triangle, sawtooth' },
@@ -223,8 +225,13 @@ function resizeCanvasAndLayout() {
   resizeCanvas(newWidth, newHeight, false); // no redraw
 
   // set the starting point (initial frequency) somewhere in this area
-  layout.baseX = Math.floor(constrain(newWidth / 2 - 200, 0, newWidth * 0.25));
-  layout.baseY = Math.floor(constrain(newHeight / 2, 0, newHeight)); // vertical center
+  if (layout.spiralMode) {
+    layout.baseX = Math.floor(newWidth / 2);
+    layout.baseY = Math.floor(newHeight / 2);
+  } else { 
+    layout.baseX = Math.floor(constrain(newWidth / 2 - 200, 0, newWidth * 0.25));
+    layout.baseY = Math.floor(constrain(newHeight / 2, 0, newHeight)); // vertical center  
+  }
 }
 
 function writeSettingsFromArray(settingsDiv, settingsArray) {
@@ -305,7 +312,15 @@ function readSettingsInput(target) {
       layout.nextColumnOffsetCents = value;
       break;
     case "height":
-      if (value > 0) layout.centsToPixels = value;
+      if (value == 0) {
+        layout.centsToPixels = 1;
+        layout.spiralMode = true;
+        resizeCanvasAndLayout();
+      } else if (value > 0) {
+        layout.centsToPixels = value;
+        layout.spiralMode = false;
+        resizeCanvasAndLayout();
+      }
       break;
     case "columnpx":
       if (value > 10 && value < width) layout.columnWidth = value;
@@ -407,7 +422,6 @@ function getCentsArrFromSortedFractions(sortedFractionsArr) {
     const newCents = ratioToCents(fraction[1], fraction[0]);
     scaleCents.push(newCents);
   }
-  //scaleCents = [...new Set(scaleCents)].sort((a, b) => a - b);
   return scaleCents;
 }
 
@@ -510,6 +524,9 @@ function drawShader() {
   const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
   keyboardShader.setUniform("u_octaveHeight", yTo01(layout.centsToPixels * periodCents))
   keyboardShader.setUniform("u_edo", scale.equalDivisions);
+
+  // spiral mode
+  keyboardShader.setUniform("u_spiralMode", layout.spiralMode);
 
   const stepsYArray = [];
   const stepsRedArray = [];
@@ -696,45 +713,29 @@ function getCentsDisplayFromPlayingSteps(scaleCents, playingSteps) {
 }
 
 
-function setChannelFreqFromCoords(channel, x, y, initType, id) {
-
+function setChannelFreqFromCoords(channel, x, y) {
   // save last
   channel.properties.lastCents = channel.properties.cents;
 
-  // set new cents
-  channel.properties.cents = undefined;
-  const channelCents = setCentsFromScreenXY(channel, x, y);
-  channel.properties.cents = channelCents;
-
-  // set freq
-  channel.synth.freq(frequency(scale.baseFrequency, channelCents));
-
-  // make new channel if started
-  if (initType !== undefined) initChannel(channel, initType, id);
+  // updated cents/ freq
+  channel.properties.cents = setCentsFromScreenXY(channel, x, y);
+  channel.synth.freq(frequency(scale.baseFrequency, channel.properties.cents));
 }
 
 function setChannelFreqFromKbd(channel, keyIndex) {
-
   channel.properties.kbdstep = keyIndex;
 
-  // set new cents
-  const channelCents = stepOffsetToCents(keyIndex);
-  channel.properties.cents = channelCents;
-
-  // set freq
-  channel.synth.freq(frequency(scale.baseFrequency, channelCents));
+  // updated cents/ freq
+  channel.properties.cents = stepOffsetToCents(keyIndex);
+  channel.synth.freq(frequency(scale.baseFrequency, channel.properties.cents));
 }
 
 function setChannelFreqFromMidi(channel, midiOffset) {
-
   channel.properties.midiOffset = midiOffset;
 
-  // set new cents
-  const channelCents = stepOffsetToCents(midiOffset);
-  channel.properties.cents = channelCents;
-
-  // set freq
-  channel.synth.freq(frequency(scale.baseFrequency, channelCents));
+  // updated cents/ freq
+  channel.properties.cents = stepOffsetToCents(midiOffset);
+  channel.synth.freq(frequency(scale.baseFrequency, channel.properties.cents));
 }
 
 function adjustScaleRatioFromMidiCC(scaleDeg, value) {
@@ -747,6 +748,22 @@ function setCentsFromScreenXY(channel, x, y) {
   // make position relative to the base note, at which cents === 0.
   x -= layout.baseX;
   y -= layout.baseY;
+
+  // manipulate values in spiral mode to basically wrap to polar coords
+  // same as in shader
+  if (layout.spiralMode) {
+    const cartesian = createVector(x, y);
+    const polarRadius = cartesian.mag();
+    const polarAngle = Math.atan2(cartesian.x, cartesian.y);
+    const polarAngleNorm = (polarAngle * 0.5) / PI + 0.5;
+
+    x = polarRadius;
+    y = polarAngleNorm;
+
+    y *= layout.nextColumnOffsetCents;
+    x -= y / (layout.nextColumnOffsetCents * layout.columnWidth);
+    // not quite right yet, the radius, at least
+  }
 
   // rounded to left column edge => rounded down.
   // if playing in the base column, this will be 0.
@@ -770,7 +787,7 @@ function setCentsFromScreenXY(channel, x, y) {
   let cents = centsFromX + centsFromY;
 
   // if nothing to possibly snap to, just return cents now
-  if (scale.cents.length === 0 || scale.maxSnapToCents === 0) return cents;
+  if (scale.cents.length === 0 || scale.maxSnapToCents === 0 || layout.spiralMode) return cents;
 
   // try finding a snapping target and strength and update cents based on those
   updateSnappingForChannel(channel, cents);
@@ -1030,8 +1047,8 @@ function handleTouchStart(event) {
     
     const channel = soundsArray[firstChannel("off")];
     if (channel !== undefined) {
-      setChannelFreqFromCoords(channel, x, y, "touch", id);
-
+      setChannelFreqFromCoords(channel, x, y);
+      initChannel(channel, "touch", id);
       window.draw();
     }
   })
@@ -1047,7 +1064,6 @@ function handleTouchMove(event) {
     const channel = soundsArray[exactChannel("touch", id)];
     if (channel !== undefined) {
       setChannelFreqFromCoords(channel, x, y);
-  
       window.draw();
     }
   })
@@ -1067,7 +1083,6 @@ function handleTouchEnd(event) {
       if (countChannelTypes().touch > 0 && event.touches.length === 0) {
         releaseAllChannels("touch");
       }
-      
       window.draw();
     }
   })
@@ -1090,7 +1105,6 @@ window.mouseDragged = () => {
   const channel = soundsArray[firstChannel("mouse")];
   if (channel !== undefined) {
     setChannelFreqFromCoords(channel, mouseX, mouseY);
-
     window.draw();
   }
 };
@@ -1103,8 +1117,8 @@ window.mousePressed = () => {
   
   const channel = soundsArray[firstChannel("off")];
   if (channel !== undefined) {
-    setChannelFreqFromCoords(channel, mouseX, mouseY, "mouse");
-
+    setChannelFreqFromCoords(channel, mouseX, mouseY);
+    initChannel(channel, "mouse");
     window.draw();
   }
 }
@@ -1115,7 +1129,6 @@ window.mouseReleased = () => {
   const channel = soundsArray[firstChannel("mouse")];
   if (channel !== undefined) {
     releaseChannel(channel, soundconfig.releaseDur);
-    
     window.draw();
   }
 }

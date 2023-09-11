@@ -22,6 +22,8 @@ uniform int u_playYarrayLength;
 uniform vec2 u_circlePos;
 uniform float u_circleRadius;
 
+uniform bool u_spiralMode;
+
 #define PI 3.14159265358979323844
 
 float semiPixel = u_pixelHeight * 0.5;
@@ -132,6 +134,12 @@ vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
 
 vec3 keyboardColor(vec2 normPos, vec2 centerPos) {
     vec2 deltaPos = normPos - centerPos;
+
+    if (u_spiralMode) {
+        deltaPos = normCartToNormPolar(vec2(-deltaPos.x, -deltaPos.y / (u_resolution.x / u_resolution.y)));
+        deltaPos.y *= u_columnOffsetY;
+        deltaPos.x = deltaPos.x - deltaPos.y / u_columnOffsetY * u_columnWidth;
+    }
 
     float columnIndex = floor(deltaPos.x / u_columnWidth);
     vec2 columnPos = vec2(columnIndex * u_columnWidth, columnIndex * -u_columnOffsetY);
