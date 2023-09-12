@@ -463,7 +463,11 @@ window.draw = () => {
   fill("white");
   textAlign(CENTER, CENTER);
   textSize(12);
-  text(scale.baseFrequency, layout.baseX + layout.columnWidth*0.5, layout.baseY - 2);
+  const baseNoteOffset = {
+    x: layout.spiralMode ? 0 : layout.columnWidth*0.5,
+    y: layout.spiralMode ? - layout.columnWidth*2.5 - 2 : - 2,
+  }
+  text(scale.baseFrequency, layout.baseX + baseNoteOffset.x, layout.baseY + baseNoteOffset.y);
 
   const playingSteps = getStepsFromSoundsArray(soundsArray.filter(ch => ch.source !== "off" && ch.source !== "release"));
   // text(`${JSON.stringify(playingSteps)}`, width/2, 20);
@@ -790,7 +794,8 @@ function setCentsFromScreenXY(channel, x, y) {
     const polarAngle = Math.atan2(cartesian.x, cartesian.y);
     const polarAngleNorm = (polarAngle * 0.5) / PI + 0.5;
 
-    x = polarRadius;
+    // include offset of columns from center, as seen in shader
+    x = polarRadius - 2 * layout.columnWidth;
     y = polarAngleNorm; // goes from  1 to 0 clockwise starting from the top...
 
     // effect of spiral on the radius - this works but I'm not totally sure why

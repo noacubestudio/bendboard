@@ -145,8 +145,8 @@ vec3 keyboardColor(vec2 normPos, vec2 centerPos) {
 
     if (u_spiralMode) {
         deltaPos = normCartToNormPolar(vec2(-deltaPos.x, -deltaPos.y / (u_resolution.x / u_resolution.y)));
+        deltaPos.x -= (deltaPos.y + 2.) * u_columnWidth;
         deltaPos.y *= u_columnOffsetY;
-        deltaPos.x = deltaPos.x - deltaPos.y / u_columnOffsetY * u_columnWidth;
     }
 
     float columnIndex = floor(deltaPos.x / u_columnWidth);
