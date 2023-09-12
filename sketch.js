@@ -128,11 +128,26 @@ window.setup = () => {
   for (const {name, type} of initialSettings) {
     if (parsedUrl.searchParams.has(name)) {
       const value = parsedUrl.searchParams.get(name);
-      updateSetting({name, value, type})
-      const inputElement = document.querySelector('input[name='+name+']');
-      inputElement.value = value;
+      if (value === "" || isNaN(value) && type === "number") { 
+        parsedUrl.searchParams.delete(name); 
+        const describeValue = (value === "") ? "empty" : "\"" + value + "\"";
+        print("\"" + name + "\" parameter in the URL can not be " + describeValue + "!");
+      } else { 
+        updateSetting({name, value, type})
+        const inputElement = document.querySelector('input[name='+name+']');
+        inputElement.value = value;
+      } 
     }
   }
+
+  // clean up URL immediately if there is a difference
+  const maybeChangedURL = parsedUrl.toString();
+  if (maybeChangedURL !== window.location.href) {
+    print("Removed some query parameters")
+    // Replace the current URL with the updated one without adding to history
+    window.history.replaceState({}, '', parsedUrl.toString());
+  }
+
 
   // show/hide the settings input
   menuButton.addEventListener("click", (event) => {
@@ -372,12 +387,10 @@ function updateURLfromSetting(target) {
 
   let {name, value, initialValue} = target;
 
-  if (initialValue != value) {
-    parsedUrl.searchParams.set(name, value);
-    //console.log('set', name, initialValue, value);
-  } else {
+  if (value == initialValue || value == null || value == "") {
     parsedUrl.searchParams.delete(name);
-    //console.log('removed', name);
+  } else {
+    parsedUrl.searchParams.set(name, value);
   }
 
   // Replace the current URL with the updated one without adding to history
