@@ -39,7 +39,8 @@ const layout = {
   columnWidth: 54,
   centsToPixels: 0.5, //0.75
   // special view mode(s)
-  spiralMode: false
+  spiralMode: false,
+  stepsVisibility: 1.0
 }
 const scale = {
   baseFrequency: 110.0,
@@ -102,10 +103,11 @@ window.setup = () => {
     { name: 'mode', label: 'Mode (starting step)', initialValue: scale.mode, type: 'number', placeholder: '0, 1 ... last step of scale' },
     { name: 'basefreq', label: 'Base frequency (Hz)', initialValue: scale.baseFrequency, type: 'number', placeholder: '25.50 (low A)' },
     { name: 'period', label: 'Repetition Interval (ratio)', initialValue: scale.periodRatio.join("/"), type: 'text', placeholder: '2/1' },
+    { name: 'snaprange', label: 'Snapping height (cents)', initialValue: scale.maxSnapToCents, type: 'number', placeholder: '0, 30, 50', step: '5' },
     { name: 'xoffset', label: 'Column offset (cents)', initialValue: layout.nextColumnOffsetCents, type: 'number', placeholder: '200 (a tone)' },
     { name: 'height', label: 'Column height (px per cent)', initialValue: layout.centsToPixels, type: 'number', placeholder: '0.5, 0.75, 0 (circular)', step: '0.05' },
     { name: 'columnpx', label: 'Column width (px)', initialValue: layout.columnWidth, type: 'number', placeholder: '50' },
-    { name: 'snaprange', label: 'Snapping height (cents)', initialValue: scale.maxSnapToCents, type: 'number', placeholder: '0, 30, 50', step: '5' },
+    { name: 'stepsvisibility', label: 'Visibility of scale/EDO frets', initialValue: layout.stepsVisibility, type: 'number', placeholder: '0.1, 0.7, 1.0', step: '0.1' },
     { name: 'waveform', label: 'Waveform', initialValue: soundconfig.waveform, type: 'text', placeholder: 'sine, square, triangle, sawtooth' },
     { name: 'delay', label: 'Delay dry/wet', initialValue: soundconfig.delayWet, type: 'number', placeholder: '0, 0.7, 1.0', step: '0.1' },
     { name: 'midiname', label: 'MIDI IN • Search device name', initialValue: midiSettings.deviceName, type: 'text', placeholder: 'Check console (F12) for options' },
@@ -349,6 +351,9 @@ function readSettingsInput(target) {
     case "midioctave":
       midiSettings.baseOctave = value;
       break;
+    case "stepsvisibility":
+      if (value >= 0 && value <= 1.0) layout.stepsVisibility = value;
+      break;
     default:
       console.log("Property " + name + " was not found!")
       break;
@@ -528,6 +533,12 @@ function drawShader() {
   // spiral mode
   keyboardShader.setUniform("u_spiralMode", layout.spiralMode);
 
+  // steps in the scale / playing steps Y
+  const playedCents = soundsArray.filter(
+    ch => ch.source !== "off" && ch.source !== "release" && ch.properties.cents !== undefined
+  ).map(ch => ch.properties.cents);
+
+  // RGB display for scale cents
   const stepsYArray = [];
   const stepsRedArray = [];
   const stepsGreenArray = [];
@@ -548,9 +559,31 @@ function drawShader() {
   keyboardShader.setUniform("u_stepsGreenArray", stepsGreenArray);
   keyboardShader.setUniform("u_stepsBlueArray", stepsBlueArray);
   keyboardShader.setUniform("u_stepsYarrayLength", stepsYArray.length);
-  const channelCents = soundsArray.filter(ch => ch.source !== "off" && ch.source !== "release" && ch.properties.cents !== undefined);
-  const playYArray = channelCents.map(ch => yTo01(ch.properties.cents * layout.centsToPixels));
+
+  keyboardShader.setUniform("u_stepsVisibility", layout.stepsVisibility);
+
+  // RGB display for played cents
+  const playYArray = [];
+  const playRedArray = [];
+  const playGreenArray = [];
+  const playBlueArray = [];
+  playedCents.forEach((cent) => {
+    const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+    const inOctaveCents = wrapNumber(cent, 0, periodCents);
+    const percentOfOctave = inOctaveCents / periodCents;
+    const hue = percentOfOctave * 360;
+    const color = chroma.oklch(0.6 + layout.stepsVisibility*0.4, 0.25 - 0.15 * layout.stepsVisibility, hue).rgb(false);
+    const [r, g, b] = color.map(value => value/255);
+
+    playYArray.push(yTo01(cent * layout.centsToPixels));
+    playRedArray.push(r);
+    playGreenArray.push(g);
+    playBlueArray.push(b);
+  });
   keyboardShader.setUniform("u_playYarray", playYArray);
+  keyboardShader.setUniform("u_playRedArray", playRedArray);
+  keyboardShader.setUniform("u_playGreenArray", playGreenArray);
+  keyboardShader.setUniform("u_playBlueArray", playBlueArray);
   keyboardShader.setUniform("u_playYarrayLength", playYArray.length);
 
   //circle

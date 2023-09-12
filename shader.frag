@@ -16,7 +16,12 @@ uniform float u_stepsBlueArray[128];
 uniform float u_stepsGreenArray[128];
 uniform int u_stepsYarrayLength;
 
+uniform float u_stepsVisibility;
+
 uniform float u_playYarray[16];
+uniform float u_playRedArray[16];
+uniform float u_playBlueArray[16];
+uniform float u_playGreenArray[16];
 uniform int u_playYarrayLength;
 
 uniform vec2 u_circlePos;
@@ -76,7 +81,7 @@ vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
 
     // decide color
     vec3 lineColor = vec3(0.85, 0.8, 0.8);
-    vec3 edoLineColor = vec3(0.2, 0.3, 0.3);
+    vec3 edoLineColor = vec3(0.2, 0.3, 0.3) * u_stepsVisibility;
 
     // start with black and add
     vec3 additiveColor = vec3(0.0);
@@ -108,7 +113,7 @@ vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
         float deltaNearestY = minWrap(octavePos.y - u_stepsYarray[i], u_octaveHeight);
         float scaleFretContour = fretMarker(curvedX, deltaNearestY, scaleFretWeight, 0.35);
         if (scaleFretContour > 0.0) {
-            vec3 color = vec3(u_stepsRedArray[i], u_stepsGreenArray[i], u_stepsBlueArray[i]);
+            vec3 color = vec3(u_stepsRedArray[i], u_stepsGreenArray[i], u_stepsBlueArray[i]) * u_stepsVisibility;
             additiveColor += color * scaleFretContour;
         }
     }
@@ -117,7 +122,7 @@ vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
     float nearestOctaveFretY = minWrap(octavePos.y, u_octaveHeight);
     float octaveFretContour = 1.0 - smoothstep(0.0, curvedX * u_octaveHeight * 0.08, abs(nearestOctaveFretY));
     if (octaveFretContour > 0.0) {
-        vec3 color = vec3(u_stepsRedArray[0], u_stepsGreenArray[0], u_stepsBlueArray[0]);
+        vec3 color = vec3(u_stepsRedArray[0], u_stepsGreenArray[0], u_stepsBlueArray[0]) * u_stepsVisibility;
         additiveColor += color * octaveFretContour * 0.4;
     }
 
@@ -127,7 +132,8 @@ vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
         float targetY = u_playYarray[i];
         float playingMarkerContour = fretMarker(curvedX, deltaPos.y - targetY, 0.04, 0.4);
         if (playingMarkerContour > 0.0) {
-            additiveColor = screenBlend(additiveColor, lineColor * playingMarkerContour);
+            vec3 color = vec3(u_playRedArray[i], u_playGreenArray[i], u_playBlueArray[i]);
+            additiveColor = screenBlend(additiveColor, color * playingMarkerContour);
         }
     }
 
