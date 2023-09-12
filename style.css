@@ -10,6 +10,7 @@ body {
 }
 canvas {
   display: block;
+  touch-action: none;
 }
 #top-container {
   position: absolute;
@@ -53,6 +54,7 @@ button {
   justify-content: center;
   align-items: center;
   font-weight: 600;
+  touch-action: none;
 }
 
 #settingsDiv {

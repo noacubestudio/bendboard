@@ -1,8 +1,6 @@
 // PROPERTIES, STATE
 
-// set if there was hover
-let ignoreTouchEvents = false;
-
+// mouse hover/ opened
 let settingsFocused = false;
 let menuButtonFocused = false;
 
@@ -73,13 +71,15 @@ window.preload = () => {
 
 // CANVAS AND INTERFACE
 
-let cnv; let density = 1;
+let density = 1;
 const container = document.getElementById("canvas-container");
 
 window.setup = () => {
 
   // p5 setup
-  cnv = createCanvas(windowWidth, windowHeight, WEBGL).parent(container);
+  const cnv = createCanvas(windowWidth, windowHeight, WEBGL).parent(container);
+  cnv.id("mainCanvas");
+  
   noLoop();
   textFont(boldMonoFont);
   rectMode(CORNERS);
@@ -89,12 +89,12 @@ window.setup = () => {
   if (density > 2) density = 1;
   pixelDensity(density);
   print("Display density:", density);
-  print("Handling touch events. Switches to mouse events on hover.")
 
   // match initial window size
   resizeCanvasAndLayout();
 
   // GUI and settings
+  const mainCanvas = document.getElementById("mainCanvas");
   const menuButton = document.getElementById("menuButton");
   const settingsDiv = document.getElementById("settingsDiv");
   const initialSettings = [
@@ -143,21 +143,10 @@ window.setup = () => {
       }
     }
   });
-  document.addEventListener('touchcancel', () => {
-    // darken
-    fill("#00000090");
-    rect(-width/2, -height/2, width, height);
-    // release
-    releaseAllChannels();
-  });
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === 'visible') {
       // console.log('browser document focused (again)');
-      // if (getAudioContext().state !== "running") {
-      //   releaseAllChannels();
-      //   window.draw();
-      // }
     } else {
       // console.log('lost focus');
       fill("#00000090");
@@ -173,16 +162,18 @@ window.setup = () => {
     releaseAllChannels("kbd");
     readSettingsInput(target);
   });
+  
+  // pointer events
+  mainCanvas.addEventListener('pointerdown',   handlePointerEvent);
+  mainCanvas.addEventListener('pointermove',   handlePointerEvent);
+  mainCanvas.addEventListener('pointerup',     handlePointerEvent);
+  mainCanvas.addEventListener('pointercancel', handlePointerEvent);
 
   // change focused state
-  menuButton.addEventListener('mouseenter', () => {if (ignoreTouchEvents) menuButtonFocused = true; window.draw();});
-  menuButton.addEventListener('mouseleave', () => {if (ignoreTouchEvents) menuButtonFocused = false; window.draw();});
-  settingsDiv.addEventListener('mouseenter', () => {if (ignoreTouchEvents) settingsFocused = true;});
-  settingsDiv.addEventListener('mouseleave', () => {if (ignoreTouchEvents) settingsFocused = false;});
-
-  cnv.touchStarted(handleTouchStart);
-  cnv.touchMoved(handleTouchMove);
-  cnv.touchEnded(handleTouchEnd);
+  menuButton.addEventListener('mouseenter', () => {menuButtonFocused = true; window.draw();});
+  menuButton.addEventListener('mouseleave', () => {menuButtonFocused = false; window.draw();});
+  settingsDiv.addEventListener('mouseenter', () => {settingsFocused = true;});
+  settingsDiv.addEventListener('mouseleave', () => {settingsFocused = false;});
 
 
   // CONNECT AUDIO NODES
@@ -789,19 +780,20 @@ function setCentsFromScreenXY(channel, x, y) {
   // manipulate values in spiral mode to basically wrap to polar coords
   // same as in shader
   if (layout.spiralMode) {
-    const cartesian = createVector(x, y);
-    const polarRadius = cartesian.mag();
-    const polarAngle = Math.atan2(cartesian.x, cartesian.y);
-    const polarAngleNorm = (polarAngle * 0.5) / PI + 0.5;
+    // get polar from cartesian coords and use them to calculate new position in spiral
+    const polarRadius = createVector(x, y).mag();
+    const polarAngle = Math.atan2(x, y);
+    // normalize angle (1 to 0 clockwise from top)
+    const polarAngleNorm = (polarAngle * 0.5) / PI + 0.5; 
 
     // include offset of columns from center, as seen in shader
-    x = polarRadius - 2 * layout.columnWidth;
-    y = polarAngleNorm; // goes from  1 to 0 clockwise starting from the top...
+    const baseRadius = 2 * layout.columnWidth; 
 
-    // effect of spiral on the radius - this works but I'm not totally sure why
-    x += y * (layout.columnWidth - (1 / layout.columnWidth));
-    // angle should modify cents - the range is same as between two columns in non spiral mode
-    y *= layout.nextColumnOffsetCents;
+    // radius converted to position in column l-r. add effect of angle to make it spiral
+    x = polarRadius - baseRadius + polarAngleNorm * (layout.columnWidth - (1 / layout.columnWidth));
+
+    // angle converted to amount of cents added (one turn = offset between two columns normally)
+    y = polarAngleNorm * layout.nextColumnOffsetCents;
   }
 
   // rounded to left column edge => rounded down.
@@ -930,7 +922,7 @@ function getCompletelySnappedCents(c) {
 
 function initChannel(channel, type, id) {
   channel.source = type;
-  if (type === "touch") channel.properties.id = id;
+  if (type === "pointer") channel.properties.id = id;
   channel.synth.start();
   channel.synth.amp(0);
   channel.synth.amp(soundconfig.maxAmp, soundconfig.attackDur, 0);
@@ -987,7 +979,7 @@ function exactChannel(source, id) {
         return i;
       }
     }
-  } else if (source === "touch") {
+  } else if (source === "pointer") {
     for (let i = 0; i < soundsArray.length; i++) {
       const channel = soundsArray[i];
       if (channel.source === source && channel.properties.id === id) {
@@ -1068,109 +1060,47 @@ function cleanRound(number) {
 
 // EVENT HANDLING
 
-function outsideCanvas(x, y) {
-  if (x < 0) return true
-  if (x > width) return true
-  if (y < 0) return true
-  if (y > height) return true
-}
-
-function handleTouchStart(event) {
+function handlePointerEvent(event) {
   event.preventDefault();
-  if (checkResumingAudioContext()) return;
 
-  event.changedTouches.forEach((touch) => {
-    const id = touch.identifier;
-    const x = touch.clientX; const y = touch.clientY - 0;
-    if (outsideCanvas(x, y)) return;
-    
+  if (event.type === "pointerdown") {
+
+    if (checkResumingAudioContext()) return;
+
     const channel = soundsArray[firstChannel("off")];
     if (channel !== undefined) {
-      setChannelFreqFromCoords(channel, x, y);
-      initChannel(channel, "touch", id);
+      setChannelFreqFromCoords(channel, event.clientX, event.clientY);
+      initChannel(channel, "pointer", event.pointerId);
       window.draw();
     }
-  })
-}
 
-function handleTouchMove(event) {
-  event.preventDefault();
-  event.changedTouches.forEach((touch) => {
-    const id = touch.identifier;
-    const x = touch.clientX; const y = touch.clientY - 0;
-    if (outsideCanvas(x, y)) return;
-    
-    const channel = soundsArray[exactChannel("touch", id)];
-    if (channel !== undefined) {
-      setChannelFreqFromCoords(channel, x, y);
-      window.draw();
-    }
-  })
-}
+  } else if (event.type === "pointerup") {
 
-function handleTouchEnd(event) {
-  event.preventDefault();
-  event.changedTouches.forEach((touch) => {
-    const id = touch.identifier;
-    //const x = touch.clientX; const y = touch.clientY - 60;
-    
-    const channel = soundsArray[exactChannel("touch", id)];
+    const channel = soundsArray[exactChannel("pointer", event.pointerId)];
     if (channel !== undefined) {
       releaseChannel(channel, soundconfig.releaseDur);
-
-      // if there are playing touches still, but none on the screen, stop all
-      if (countChannelTypes().touch > 0 && event.touches.length === 0) {
-        releaseAllChannels("touch");
-      }
       window.draw();
     }
-  })
-}
 
-window.mouseMoved = () => {
-  if (!ignoreTouchEvents && !navigator.maxTouchPoints > 0) {
-    ignoreTouchEvents = true;
-    print("mouse move detected: mouse/desktop mode:", ignoreTouchEvents);
+  } else if (event.type === "pointercancel") {
+
+    // darken
+    fill("#00000090");
+    rect(-width/2, -height/2, width, height);
+    // release
+    releaseAllChannels();
+
+  } else if (event.type === "pointermove") {
+
+    const channel = soundsArray[exactChannel("pointer", event.pointerId)];
+    if (channel !== undefined) {
+      setChannelFreqFromCoords(channel, event.clientX, event.clientY);
+      window.draw();
+    }
   }
 }
 
-window.mouseDragged = () => {
-  if (settingsFocused || menuButtonFocused) return;
-  if (!ignoreTouchEvents)
-    return;
-  if (outsideCanvas(mouseX, mouseY))
-    return;
 
-  const channel = soundsArray[firstChannel("mouse")];
-  if (channel !== undefined) {
-    setChannelFreqFromCoords(channel, mouseX, mouseY);
-    window.draw();
-  }
-};
-
-window.mousePressed = () => {
-  if (checkResumingAudioContext()) return;
-  if (settingsFocused || menuButtonFocused) return;
-  if (!ignoreTouchEvents) return
-  if (outsideCanvas(mouseX, mouseY)) return;
-  
-  const channel = soundsArray[firstChannel("off")];
-  if (channel !== undefined) {
-    setChannelFreqFromCoords(channel, mouseX, mouseY);
-    initChannel(channel, "mouse");
-    window.draw();
-  }
-}
-
-window.mouseReleased = () => {
-  if (!ignoreTouchEvents) return
-  
-  const channel = soundsArray[firstChannel("mouse")];
-  if (channel !== undefined) {
-    releaseChannel(channel, soundconfig.releaseDur);
-    window.draw();
-  }
-}
 
 function checkResumingAudioContext() {
   if (getAudioContext().state !== "running") {
