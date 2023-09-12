@@ -126,6 +126,14 @@ vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
         additiveColor += color * octaveFretContour * 0.4;
     }
 
+    // add a sine visual that "speeds up" along the height
+    float sineDecoFrequency = mix(2.0, 50.0, (deltaPos.y) / octaveTileSize.y); //floor(deltaPos.y) * 50.; //
+    float sineDecoAmplitude = 0.5 + 0.4 * sin(u_octaveHeight * sineDecoFrequency * 1. * deltaPos.y);
+    //float sineDecoSDF = deltaPos.x - sineDecoAmplitude;
+    float sineDecoContour = 1.0 - smoothstep(0.0, u_pixelHeight / u_columnWidth, abs(sineDecoAmplitude - (deltaPos.x / u_columnWidth)));
+    //float sineDecoContour = smoothstep(1., 0., abs(sineDecoSDF) / (abs(0.4 + cos(u_octaveHeight * sineDecoFrequency * 120. * deltaPos.y))));
+    additiveColor += edoLineColor * min(max(sineDecoContour * deltaPos.y, 0.), 0.5);
+
     // playing
     for (int i = 0; i < 10; i++) {
         if (i == u_playYarrayLength) break;
