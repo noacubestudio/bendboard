@@ -71,11 +71,29 @@ window.preload = () => {
 
 // CANVAS AND INTERFACE
 
+const initialSettings = [
+  { name: 'edo', label: 'Equal divisions of octave', initialValue: scale.equalDivisions, type: 'number', placeholder: '12, 14, 19, 31' },
+  { name: 'scale', label: 'Just Intonation Scale', initialValue: scale.scaleRatios.join(":"), type: 'text', placeholder: '12:17:24, 4:5:6:7, all' },
+  { name: 'mode', label: 'Mode (starting step)', initialValue: scale.mode, type: 'number', placeholder: '0, 1 ... last step of scale' },
+  { name: 'basefreq', label: 'Base frequency (Hz)', initialValue: scale.baseFrequency, type: 'number', placeholder: '25.50 (low A)' },
+  { name: 'period', label: 'Repetition Interval (ratio)', initialValue: scale.periodRatio.join("/"), type: 'text', placeholder: '2/1' },
+  { name: 'snaprange', label: 'Snapping height (cents)', initialValue: scale.maxSnapToCents, type: 'number', placeholder: '0, 30, 50', step: '5' },
+  { name: 'xoffset', label: 'Column offset (cents)', initialValue: layout.nextColumnOffsetCents, type: 'number', placeholder: '200 (a tone)' },
+  { name: 'height', label: 'Column height (px per cent)', initialValue: layout.centsToPixels, type: 'number', placeholder: '0.5, 0.75, 0 (circular)', step: '0.05' },
+  { name: 'columnpx', label: 'Column width (px)', initialValue: layout.columnWidth, type: 'number', placeholder: '50' },
+  { name: 'stepsvisibility', label: 'Visibility of scale/EDO frets', initialValue: layout.stepsVisibility, type: 'number', placeholder: '0.1, 0.7, 1.0', step: '0.1' },
+  { name: 'waveform', label: 'Waveform', initialValue: soundconfig.waveform, type: 'text', placeholder: 'sine, square, triangle, sawtooth' },
+  { name: 'delay', label: 'Delay dry/wet', initialValue: soundconfig.delayWet, type: 'number', placeholder: '0, 0.7, 1.0', step: '0.1' },
+  { name: 'midiname', label: 'MIDI IN • Search device name', initialValue: midiSettings.deviceName, type: 'text', placeholder: 'Check console (F12) for options' },
+  { name: 'midioctave', label: 'MIDI IN • Starting octave', initialValue: midiSettings.baseOctave, type: 'number', placeholder: '2, 3, 4' },
+  // Add more objects as needed
+];
+
 let density = 1;
 const container = document.getElementById("canvas-container");
+const parsedUrl = new URL(window.location.href);
 
 window.setup = () => {
-
   // p5 setup
   const cnv = createCanvas(windowWidth, windowHeight, WEBGL).parent(container);
   cnv.id("mainCanvas");
@@ -97,28 +115,24 @@ window.setup = () => {
   const mainCanvas = document.getElementById("mainCanvas");
   const menuButton = document.getElementById("menuButton");
   const settingsDiv = document.getElementById("settingsDiv");
-  const initialSettings = [
-    { name: 'edo', label: 'Equal divisions of octave', initialValue: scale.equalDivisions, type: 'number', placeholder: '12, 14, 19, 31' },
-    { name: 'scale', label: 'Just Intonation Scale', initialValue: scale.scaleRatios.join(":"), type: 'text', placeholder: '12:17:24, 4:5:6:7, all' },
-    { name: 'mode', label: 'Mode (starting step)', initialValue: scale.mode, type: 'number', placeholder: '0, 1 ... last step of scale' },
-    { name: 'basefreq', label: 'Base frequency (Hz)', initialValue: scale.baseFrequency, type: 'number', placeholder: '25.50 (low A)' },
-    { name: 'period', label: 'Repetition Interval (ratio)', initialValue: scale.periodRatio.join("/"), type: 'text', placeholder: '2/1' },
-    { name: 'snaprange', label: 'Snapping height (cents)', initialValue: scale.maxSnapToCents, type: 'number', placeholder: '0, 30, 50', step: '5' },
-    { name: 'xoffset', label: 'Column offset (cents)', initialValue: layout.nextColumnOffsetCents, type: 'number', placeholder: '200 (a tone)' },
-    { name: 'height', label: 'Column height (px per cent)', initialValue: layout.centsToPixels, type: 'number', placeholder: '0.5, 0.75, 0 (circular)', step: '0.05' },
-    { name: 'columnpx', label: 'Column width (px)', initialValue: layout.columnWidth, type: 'number', placeholder: '50' },
-    { name: 'stepsvisibility', label: 'Visibility of scale/EDO frets', initialValue: layout.stepsVisibility, type: 'number', placeholder: '0.1, 0.7, 1.0', step: '0.1' },
-    { name: 'waveform', label: 'Waveform', initialValue: soundconfig.waveform, type: 'text', placeholder: 'sine, square, triangle, sawtooth' },
-    { name: 'delay', label: 'Delay dry/wet', initialValue: soundconfig.delayWet, type: 'number', placeholder: '0, 0.7, 1.0', step: '0.1' },
-    { name: 'midiname', label: 'MIDI IN • Search device name', initialValue: midiSettings.deviceName, type: 'text', placeholder: 'Check console (F12) for options' },
-    { name: 'midioctave', label: 'MIDI IN • Starting octave', initialValue: midiSettings.baseOctave, type: 'number', placeholder: '2, 3, 4' },
-    // Add more objects as needed
-  ];
 
   // initial write to the settings input
   writeSettingsFromArray(settingsDiv, initialSettings);
   // initial settings from the default inputs
   updateScaleProperties();
+
+  // update actual values from URL params
+  // check all the settings that are in the menu
+
+  //console.log(parsedUrl.searchParams);
+  for (const {name, type} of initialSettings) {
+    if (parsedUrl.searchParams.has(name)) {
+      const value = parsedUrl.searchParams.get(name);
+      updateSetting({name, value, type})
+      const inputElement = document.querySelector('input[name='+name+']');
+      inputElement.value = value;
+    }
+  }
 
   // show/hide the settings input
   menuButton.addEventListener("click", (event) => {
@@ -160,7 +174,9 @@ window.setup = () => {
     const target = event.target;
     releaseAllChannels("midi");
     releaseAllChannels("kbd");
-    readSettingsInput(target);
+    updateSetting(target);
+    updateURLfromSetting(target);
+    window.draw();
   });
   
   // pointer events
@@ -244,6 +260,7 @@ function writeSettingsFromArray(settingsDiv, settingsArray) {
     inputElement.type = type;
     inputElement.name = name;
     inputElement.value = initialValue;
+    inputElement.initialValue = initialValue;
     if (placeholder !== undefined) inputElement.placeholder = placeholder;
     if (step !== undefined) inputElement.step = step;
     inputElement.classList.add('input-field');
@@ -254,7 +271,7 @@ function writeSettingsFromArray(settingsDiv, settingsArray) {
   });
 }
 
-function readSettingsInput(target) {
+function updateSetting(target) {
   let {name, value, type} = target;
   if (value === undefined || value.length === 0) return;
   if (type === "number") value = Number(value);
@@ -349,7 +366,22 @@ function readSettingsInput(target) {
       console.log("Property " + name + " was not found!")
       break;
   }
-  window.draw();
+}
+
+function updateURLfromSetting(target) {
+
+  let {name, value, initialValue} = target;
+
+  if (initialValue != value) {
+    parsedUrl.searchParams.set(name, value);
+    //console.log('set', name, initialValue, value);
+  } else {
+    parsedUrl.searchParams.delete(name);
+    //console.log('removed', name);
+  }
+
+  // Replace the current URL with the updated one without adding to history
+  window.history.replaceState({}, '', parsedUrl.toString());
 }
 
 function updateScaleProperties() {
