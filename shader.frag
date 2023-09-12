@@ -90,6 +90,8 @@ vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
     // scaled x in column
     float curvedX = curveUpDown(deltaPos.x / u_columnWidth);
 
+    additiveColor += vec3(max(1.0  - curvedX * 1.5, 0.0));
+
     // lines in column
     // edo
     float edoFretWeight = 0.2 / float(u_edo);

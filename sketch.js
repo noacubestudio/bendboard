@@ -788,7 +788,7 @@ function setCentsFromScreenXY(channel, x, y) {
   let cents = centsFromX + centsFromY;
 
   // if nothing to possibly snap to, just return cents now
-  if (scale.cents.length === 0 || scale.maxSnapToCents === 0 || layout.spiralMode) return cents;
+  if (scale.cents.length === 0 || scale.maxSnapToCents === 0) return cents;
 
   // try finding a snapping target and strength and update cents based on those
   updateSnappingForChannel(channel, cents);
