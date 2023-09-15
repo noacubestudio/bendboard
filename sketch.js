@@ -93,6 +93,11 @@ let density = 1;
 const container = document.getElementById("canvas-container");
 const parsedUrl = new URL(window.location.href);
 
+function refreshSettingText(name, value) {
+  const inputElement = document.querySelector('input[name='+name+']');
+  inputElement.value = value;
+}
+
 window.setup = () => {
   // p5 setup
   const cnv = createCanvas(windowWidth, windowHeight, WEBGL).parent(container);
@@ -133,9 +138,8 @@ window.setup = () => {
         const describeValue = (value === "") ? "empty" : "\"" + value + "\"";
         print("\"" + name + "\" parameter in the URL can not be " + describeValue + "!");
       } else { 
-        updateSetting({name, value, type})
-        const inputElement = document.querySelector('input[name='+name+']');
-        inputElement.value = value;
+        updateSetting({name, value, type});
+        refreshSettingText(name, value);
       } 
     }
   }
@@ -858,6 +862,8 @@ function moveRatioNearCoords(x, y) {
   if (lastFoundNumerator !== closestScaleNumerator) {
     //print("Found distance", lastFoundDistance, "compared to initial", distanceToStep, "using", [scale.scaleRatios[0], lastFoundNumerator])
     updateScaleDegreeNumerator(closestScaleStep, lastFoundNumerator);
+    refreshSettingText("scale", scale.scaleRatios.join(":"));
+    updateURLfromSetting({name: "scale", value: scale.scaleRatios.join(":"), type: "number"});
   }
 }
 
