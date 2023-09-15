@@ -6,6 +6,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.4.2/chroma.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/webmidi@latest/dist/iife/webmidi.iife.js"></script>
     <link rel="stylesheet" type="text/css" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no, shrink-to-fit=no" />
     <meta name="HandheldFriendly" content="true">
@@ -20,10 +23,11 @@
         <!-- wip -->
         <button id="menuButton"></button>
         <div id="settingsDiv">
+          <h3>Bendboard Settings</h3>
           <ul class="tabs">
             <li data-tab="tab1" class="active">Scale</li>
-            <li data-tab="tab2">Layout</li>
-            <li data-tab="tab3">Sound I/O</li>
+            <li data-tab="tab2">Screen</li>
+            <li data-tab="tab3">Sound, MIDI</li>
           </ul>
           <div class="content">
             <div id="tab1" class="active"></div>

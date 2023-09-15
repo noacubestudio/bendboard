@@ -38,7 +38,7 @@ const layout = {
   centsToPixels: 0.5, //0.75
   // special view mode(s)
   spiralMode: false,
-  stepsVisibility: 1.0
+  stepsVisibility: 0.9
 }
 const scale = {
   baseFrequency: 110.0,
@@ -73,16 +73,18 @@ window.preload = () => {
 
 const initialSettings = [
   { tabId: 'tab1', name: 'basefreq', label: 'Base frequency (Hz)', initialValue: scale.baseFrequency, type: 'number', placeholder: '25.50 (low A)' },
-  { tabId: 'tab1', name: 'edo', label: 'Equal divisions of octave', initialValue: scale.equalDivisions, type: 'number', placeholder: '12, 14, 19, 31' },
-  { tabId: 'tab1', name: 'scale', label: 'Just Intonation Scale', initialValue: scale.scaleRatios.join(":"), type: 'text', placeholder: '12:17:24, 4:5:6:7, all' },
-  { tabId: 'tab1', name: 'mode', label: 'Mode (starting step)', initialValue: scale.mode, type: 'number', placeholder: '0, 1 ... last step of scale' },
   { tabId: 'tab1', name: 'period', label: 'Repetition Interval (ratio)', initialValue: scale.periodRatio.join("/"), type: 'text', placeholder: '2/1' },
-  { tabId: 'tab2', name: 'snaprange', label: 'Snapping height (cents)', initialValue: scale.maxSnapToCents, type: 'number', placeholder: '0, 30, 50', step: '5' },
-  { tabId: 'tab2', name: 'xoffset', label: 'Column offset (cents)', initialValue: layout.nextColumnOffsetCents, type: 'number', placeholder: '200 (a tone)' },
-  { tabId: 'tab2', name: 'height', label: 'Column height (px per cent)', initialValue: layout.centsToPixels, type: 'number', placeholder: '0.5, 0.75, 0 (circular)', step: '0.05' },
+  { tabId: 'tab1', name: 'edo', label: 'Equal Divisions', initialValue: scale.equalDivisions, type: 'number', placeholder: '12, 14, 19, 31' },
+  { tabId: 'tab1', name: 'scale', label: 'Scale Chord (ratios)', initialValue: scale.scaleRatios.join(":"), type: 'text', placeholder: '12:17:24, 4:5:6:7, all' },
+  { tabId: 'tab1', name: 'mode', label: 'Scale Mode (starting step)', initialValue: scale.mode, type: 'number', placeholder: '0, 1 ... last step of scale' },
+
+  { tabId: 'tab2', name: 'snaprange', label: 'Snap touches to scale (range in cents)', initialValue: scale.maxSnapToCents, type: 'number', placeholder: '0, 30, 50', step: '5' },
+  { tabId: 'tab2', name: 'xoffset', label: 'Repeat Position (offset in cents)', initialValue: layout.nextColumnOffsetCents, type: 'number', placeholder: '200 (a tone)' },
+  { tabId: 'tab2', name: 'height', label: 'Resolution (px per cent, 0 to wrap)', initialValue: layout.centsToPixels, type: 'number', placeholder: '0.5, 0.75, 0 (circular)', step: '0.05' },
   { tabId: 'tab2', name: 'columnpx', label: 'Column width (px)', initialValue: layout.columnWidth, type: 'number', placeholder: '50' },
-  { tabId: 'tab2', name: 'stepsvisibility', label: 'Visibility of scale/EDO frets', initialValue: layout.stepsVisibility, type: 'number', placeholder: '0.1, 0.7, 1.0', step: '0.1' },
-  { tabId: 'tab3', name: 'waveform', label: 'Waveform', initialValue: soundconfig.waveform, type: 'text', placeholder: 'sine, square, triangle, sawtooth' },
+  { tabId: 'tab2', name: 'stepsvisibility', label: 'Visibility of frets', initialValue: layout.stepsVisibility, type: 'number', placeholder: '0.1, 0.7, 1.0', step: '0.1' },
+
+  { tabId: 'tab3', name: 'waveform', label: 'Waveform (sine, square, triangle, sawtooth)', initialValue: soundconfig.waveform, type: 'text', placeholder: 'sine, square, triangle, sawtooth' },
   { tabId: 'tab3', name: 'delay', label: 'Delay dry/wet', initialValue: soundconfig.delayWet, type: 'number', placeholder: '0, 0.7, 1.0', step: '0.1' },
   { tabId: 'tab3', name: 'midiname', label: 'MIDI IN • Search device name', initialValue: midiSettings.deviceName, type: 'text', placeholder: 'Check console (F12) for options' },
   { tabId: 'tab3', name: 'midioctave', label: 'MIDI IN • Starting octave', initialValue: midiSettings.baseOctave, type: 'number', placeholder: '2, 3, 4' },

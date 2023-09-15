@@ -2,8 +2,8 @@ html, body {
   margin: 0;
   padding: 0;
   background-color: #050510;
-  font-family: Roboto, sans-serif;
-  font-size: 14px;
+  font-family: 'Roboto', sans-serif;
+  font-size: 15px;
 }
 body {
   position:absolute;
@@ -54,7 +54,16 @@ canvas {
   backdrop-filter: blur(10px);
 
   border-radius: 12px;
-  color: #ffffff76;
+  color: #ffffff80;
+}
+
+#settingsDiv h3 {
+  font-size: 15px;
+  color: #ffffff90;
+  font-weight: 600;
+  padding: 0px;
+  margin: 2px;
+  margin-bottom: 8px;
 }
 
 #settingsDiv .tabs {
@@ -63,7 +72,8 @@ canvas {
   padding: 0px;
   margin: 0px;
   width: 340px;
-  gap: 6px;
+  gap: 2px;
+  margin-bottom: 10px;
 }
 
 #settingsDiv button, #settingsDiv .tabs li {
@@ -73,7 +83,7 @@ canvas {
   -ms-user-select: none;
   user-select: none;
   padding: 10px 14px;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
 
   background-color: #ffffff15;
@@ -104,9 +114,10 @@ canvas {
 }
 
 .input-label {
-  font-size: 14px;
+  font-size: 15px;
   margin-top: 8px;
   margin-bottom: 5px;
+  margin-left: 2px;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -119,7 +130,7 @@ canvas {
   flex: 1;
   width: 340px;
   padding: 10px 10px;
-  font-size: 15px;
+  font-size: 16px;
   border-radius: 6px;
 }
 
