@@ -34,7 +34,7 @@ const layout = {
   // per column
   nextColumnOffsetCents: 200,
   // width and height
-  columnWidth: 54,
+  columnWidth: 700,
   centsToPixels: 0.5, //0.75
   // special view mode(s)
   spiralMode: false,
@@ -257,7 +257,7 @@ function resizeCanvasAndLayout() {
     layout.baseX = Math.floor(newWidth / 2);
     layout.baseY = Math.floor(newHeight / 2);
   } else { 
-    layout.baseX = Math.floor(constrain(newWidth / 2 - 200, 0, newWidth * 0.25));
+    layout.baseX = Math.floor(constrain(newWidth / 2 - 300, 0, newWidth * 0.15));
     layout.baseY = Math.floor(constrain(newHeight / 2, 0, newHeight)); // vertical center  
   }
 }
