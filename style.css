@@ -26,33 +26,13 @@ canvas {
 #top-container * {
   position: relative;
 }
-button {
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
-  padding: 20px 16px;
-  font-size: 14px;
-  font-weight: 500;
-
-  background-color: #33333390;
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-
-  color: #ffffff;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-}
 
 #menuButton {
   background-color: transparent;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
   padding: 0px;
   margin: 6px;
   border-radius: 50%;
+  border: none;
   height: 80px;
   width: 80px;
   display: flex;
@@ -77,6 +57,47 @@ button {
   color: #ffffff76;
 }
 
+#settingsDiv .tabs {
+  list-style: none;
+  display: flex;
+  padding: 0px;
+  margin: 0px;
+  width: 340px;
+  gap: 6px;
+}
+
+#settingsDiv button, #settingsDiv .tabs li {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 500;
+
+  background-color: #ffffff15;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#settingsDiv .tabs li.active {
+  background-color: #ffffff35;
+}
+
+#settingsDiv .content > div {
+  display: none;
+}
+
+#settingsDiv .content > div.active {
+  display: block;
+}
+
 .input-group {
   display: flex;
   flex-direction: column;
@@ -97,7 +118,7 @@ button {
   color: #ffffffE0;
   flex: 1;
   width: 340px;
-  padding: 6px 10px;
+  padding: 10px 10px;
   font-size: 15px;
   border-radius: 6px;
 }

@@ -34,7 +34,7 @@ const layout = {
   // per column
   nextColumnOffsetCents: 200,
   // width and height
-  columnWidth: 700,
+  columnWidth: 70,
   centsToPixels: 0.5, //0.75
   // special view mode(s)
   spiralMode: false,
@@ -72,20 +72,20 @@ window.preload = () => {
 // CANVAS AND INTERFACE
 
 const initialSettings = [
-  { name: 'edo', label: 'Equal divisions of octave', initialValue: scale.equalDivisions, type: 'number', placeholder: '12, 14, 19, 31' },
-  { name: 'scale', label: 'Just Intonation Scale', initialValue: scale.scaleRatios.join(":"), type: 'text', placeholder: '12:17:24, 4:5:6:7, all' },
-  { name: 'mode', label: 'Mode (starting step)', initialValue: scale.mode, type: 'number', placeholder: '0, 1 ... last step of scale' },
-  { name: 'basefreq', label: 'Base frequency (Hz)', initialValue: scale.baseFrequency, type: 'number', placeholder: '25.50 (low A)' },
-  { name: 'period', label: 'Repetition Interval (ratio)', initialValue: scale.periodRatio.join("/"), type: 'text', placeholder: '2/1' },
-  { name: 'snaprange', label: 'Snapping height (cents)', initialValue: scale.maxSnapToCents, type: 'number', placeholder: '0, 30, 50', step: '5' },
-  { name: 'xoffset', label: 'Column offset (cents)', initialValue: layout.nextColumnOffsetCents, type: 'number', placeholder: '200 (a tone)' },
-  { name: 'height', label: 'Column height (px per cent)', initialValue: layout.centsToPixels, type: 'number', placeholder: '0.5, 0.75, 0 (circular)', step: '0.05' },
-  { name: 'columnpx', label: 'Column width (px)', initialValue: layout.columnWidth, type: 'number', placeholder: '50' },
-  { name: 'stepsvisibility', label: 'Visibility of scale/EDO frets', initialValue: layout.stepsVisibility, type: 'number', placeholder: '0.1, 0.7, 1.0', step: '0.1' },
-  { name: 'waveform', label: 'Waveform', initialValue: soundconfig.waveform, type: 'text', placeholder: 'sine, square, triangle, sawtooth' },
-  { name: 'delay', label: 'Delay dry/wet', initialValue: soundconfig.delayWet, type: 'number', placeholder: '0, 0.7, 1.0', step: '0.1' },
-  { name: 'midiname', label: 'MIDI IN • Search device name', initialValue: midiSettings.deviceName, type: 'text', placeholder: 'Check console (F12) for options' },
-  { name: 'midioctave', label: 'MIDI IN • Starting octave', initialValue: midiSettings.baseOctave, type: 'number', placeholder: '2, 3, 4' },
+  { tabId: 'tab1', name: 'basefreq', label: 'Base frequency (Hz)', initialValue: scale.baseFrequency, type: 'number', placeholder: '25.50 (low A)' },
+  { tabId: 'tab1', name: 'edo', label: 'Equal divisions of octave', initialValue: scale.equalDivisions, type: 'number', placeholder: '12, 14, 19, 31' },
+  { tabId: 'tab1', name: 'scale', label: 'Just Intonation Scale', initialValue: scale.scaleRatios.join(":"), type: 'text', placeholder: '12:17:24, 4:5:6:7, all' },
+  { tabId: 'tab1', name: 'mode', label: 'Mode (starting step)', initialValue: scale.mode, type: 'number', placeholder: '0, 1 ... last step of scale' },
+  { tabId: 'tab1', name: 'period', label: 'Repetition Interval (ratio)', initialValue: scale.periodRatio.join("/"), type: 'text', placeholder: '2/1' },
+  { tabId: 'tab2', name: 'snaprange', label: 'Snapping height (cents)', initialValue: scale.maxSnapToCents, type: 'number', placeholder: '0, 30, 50', step: '5' },
+  { tabId: 'tab2', name: 'xoffset', label: 'Column offset (cents)', initialValue: layout.nextColumnOffsetCents, type: 'number', placeholder: '200 (a tone)' },
+  { tabId: 'tab2', name: 'height', label: 'Column height (px per cent)', initialValue: layout.centsToPixels, type: 'number', placeholder: '0.5, 0.75, 0 (circular)', step: '0.05' },
+  { tabId: 'tab2', name: 'columnpx', label: 'Column width (px)', initialValue: layout.columnWidth, type: 'number', placeholder: '50' },
+  { tabId: 'tab2', name: 'stepsvisibility', label: 'Visibility of scale/EDO frets', initialValue: layout.stepsVisibility, type: 'number', placeholder: '0.1, 0.7, 1.0', step: '0.1' },
+  { tabId: 'tab3', name: 'waveform', label: 'Waveform', initialValue: soundconfig.waveform, type: 'text', placeholder: 'sine, square, triangle, sawtooth' },
+  { tabId: 'tab3', name: 'delay', label: 'Delay dry/wet', initialValue: soundconfig.delayWet, type: 'number', placeholder: '0, 0.7, 1.0', step: '0.1' },
+  { tabId: 'tab3', name: 'midiname', label: 'MIDI IN • Search device name', initialValue: midiSettings.deviceName, type: 'text', placeholder: 'Check console (F12) for options' },
+  { tabId: 'tab3', name: 'midioctave', label: 'MIDI IN • Starting octave', initialValue: midiSettings.baseOctave, type: 'number', placeholder: '2, 3, 4' },
   // Add more objects as needed
 ];
 
@@ -162,6 +162,27 @@ window.setup = () => {
     } else {
       settingsDiv.style.display = 'none';
     }
+  });
+
+  // switch tabs
+  const settingsDivTabs = document.querySelectorAll('.tabs li');
+  const settingsDivContent = document.querySelectorAll('.content > div');
+
+  settingsDivTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      // Hide all content divs/ deactivate all tabs
+      settingsDivContent.forEach(div => {
+        div.classList.remove('active');
+      });
+      settingsDivTabs.forEach(t => {
+        t.classList.remove('active');
+      });
+
+      // Show the selected content and activate the tab
+      const tabId = tab.getAttribute('data-tab');
+      document.getElementById(tabId).classList.add('active');
+      tab.classList.add('active');
+    });
   });
 
   // escape key also works
@@ -266,7 +287,7 @@ function writeSettingsFromArray(settingsDiv, settingsArray) {
 
   // Generate labels and inputs
   settingsArray.forEach((inputObj) => {
-    const { name, label, initialValue, type, placeholder, step } = inputObj;
+    const { name, label, initialValue, type, placeholder, step, tabId } = inputObj;
 
     const groupElement = document.createElement('div');
     groupElement.classList.add('input-group');
@@ -286,7 +307,10 @@ function writeSettingsFromArray(settingsDiv, settingsArray) {
 
     groupElement.appendChild(labelElement);
     groupElement.appendChild(inputElement);
-    settingsDiv.appendChild(groupElement);
+
+    // add to correct tab
+    const destination = document.getElementById(tabId) ?? settingsDiv;
+    destination.appendChild(groupElement);
   });
 }
 
