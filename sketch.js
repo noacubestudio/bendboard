@@ -637,19 +637,18 @@ function drawShader() {
   drawingContext.disable(drawingContext.DEPTH_TEST);
 }
 
+function findClosestIndex(sortedArray, target) {
+  return sortedArray.reduce(
+    (acc, curr, index) =>
+      Math.abs(curr - target) < Math.abs(sortedArray[acc] - target) ? index : acc,
+    0
+  );
+}
 
 function getStepsFromSoundsArray(playingChannels) {
   // get the exact step that is playing with kbd/midi, or that is closest in cents
   // dist parameter describes how close a played pitch is to the nearest step
   const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
-  
-  function findClosestIndex(sortedArray, target) {
-    return sortedArray.reduce(
-      (acc, curr, index) =>
-        Math.abs(curr - target) < Math.abs(sortedArray[acc] - target) ? index : acc,
-      0
-    );
-  }
   
   return playingChannels.map(ch => {
     if (!isNaN(ch.properties.midiOffset)) return {offset: ch.properties.midiOffset, dist: 0};
@@ -790,8 +789,20 @@ function setChannelFreqFromCoords(channel, x, y) {
   // save last
   channel.properties.lastCents = channel.properties.cents;
 
-  // updated cents/ freq
-  channel.properties.cents = setCentsFromScreenXY(channel, x, y);
+  // get cents/ freq
+  let atCents = getCentsFromScreenXY(x, y);
+
+  // add snapping, if needed
+  if (scale.cents.length > 0 && scale.maxSnapToCents > 0) {
+    // try finding a snapping target and strength and update cents based on those
+    updateSnappingForChannel(channel, atCents);
+    if (channel.properties.snapTargetCents !== undefined) {
+      atCents = lerp(atCents, channel.properties.snapTargetCents, channel.properties.snapStrength/100);
+    }
+  }
+
+  // update cents and freq
+  channel.properties.cents = atCents;
   channel.synth.freq(frequency(scale.baseFrequency, channel.properties.cents));
 }
 
@@ -811,13 +822,46 @@ function setChannelFreqFromMidi(channel, midiOffset) {
   channel.synth.freq(frequency(scale.baseFrequency, channel.properties.cents));
 }
 
-function adjustScaleRatioFromMidiCC(scaleDeg, value) {
+function updateScaleDegreeNumerator(scaleDeg, value) {
   if (scaleDeg == undefined || scaleDeg < 0) return;
   scale.scaleRatios[scaleDeg] = value;
   updateScaleProperties();
 }
 
-function setCentsFromScreenXY(channel, x, y) {
+function moveRatioNearCoords(x, y) {
+  const atCents = getCentsFromScreenXY(x, y);
+  const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
+  const atCentsInPeriod = wrapNumber(atCents, 0, periodCents);
+
+  // find closest step to edit
+  const closestScaleStep = findClosestIndex([...scale.cents, periodCents], atCentsInPeriod);
+  if (closestScaleStep === 0) return;
+
+  const closestScaleNumerator = scale.scaleRatios[closestScaleStep % scale.scaleRatios.length];
+  const distanceToStep = atCentsInPeriod - stepOffsetToCents(closestScaleStep);
+
+  // try finding closer possible step (try other numerators and see if any have smaller distance) 
+  let lastFoundDistance = distanceToStep;
+  let lastFoundNumerator = closestScaleNumerator;
+
+  for (let i = closestScaleNumerator; i >= scale.scaleRatios[0] && i <= scale.scaleRatios[scale.scaleRatios.length-1] + 1; i += Math.sign(distanceToStep)) {
+    
+    const distanceToPotentialStep = atCentsInPeriod - ratioToCents(scale.scaleRatios[0], i);
+    if (Math.abs(lastFoundDistance) < Math.abs(distanceToPotentialStep)) { break; }
+
+    lastFoundDistance = distanceToPotentialStep;
+    lastFoundNumerator = i;
+    //print(i, "has distance", distanceToPotentialStep);
+  }
+  
+  // apply
+  if (lastFoundNumerator !== closestScaleNumerator) {
+    //print("Found distance", lastFoundDistance, "compared to initial", distanceToStep, "using", [scale.scaleRatios[0], lastFoundNumerator])
+    updateScaleDegreeNumerator(closestScaleStep, lastFoundNumerator);
+  }
+}
+
+function getCentsFromScreenXY(x, y) {
   // make position relative to the base note, at which cents === 0.
   x -= layout.baseX;
   y -= layout.baseY;
@@ -861,17 +905,6 @@ function setCentsFromScreenXY(channel, x, y) {
   const centsFromY = -y / layout.centsToPixels;
 
   let cents = centsFromX + centsFromY;
-
-  // if nothing to possibly snap to, just return cents now
-  if (scale.cents.length === 0 || scale.maxSnapToCents === 0) return cents;
-
-  // try finding a snapping target and strength and update cents based on those
-  updateSnappingForChannel(channel, cents);
-  if (channel.properties.snapTargetCents !== undefined) {
-    cents = lerp(cents, channel.properties.snapTargetCents, channel.properties.snapStrength/100);
-  }
-
-  // regardless, return cents now.
   return cents;
 }
 
@@ -1114,6 +1147,7 @@ function handlePointerEvent(event) {
 
     const channel = soundsArray[firstChannel("off")];
     if (channel !== undefined) {
+      if (event.pointerType === "pen") moveRatioNearCoords(event.clientX, event.clientY);
       setChannelFreqFromCoords(channel, event.clientX, event.clientY);
       initChannel(channel, "pointer", event.pointerId);
       window.draw();
@@ -1139,6 +1173,7 @@ function handlePointerEvent(event) {
 
     const channel = soundsArray[exactChannel("pointer", event.pointerId)];
     if (channel !== undefined) {
+      if (event.pointerType === "pen") moveRatioNearCoords(event.clientX, event.clientY);
       setChannelFreqFromCoords(channel, event.clientX, event.clientY);
       window.draw();
     }
@@ -1285,7 +1320,7 @@ function initNewMidiInput(deviceName) {
     const targetScaleDeg = ccNumber % 10 - 1;
 
     // console.log(ccNumber, ":", ccValue);
-    adjustScaleRatioFromMidiCC(targetScaleDeg, Math.floor(ccValue*127));
+    updateScaleDegreeNumerator(targetScaleDeg, Math.floor(ccValue*127));
     
     // if note played via keyboard or midi, update channel
     //const changedStepChannel = cha
