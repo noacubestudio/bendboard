@@ -62,10 +62,17 @@ const midiSettings = {
 
 let boldMonoFont;
 let keyboardShader;
+//let pianoSampleBuffers = [];
 
 window.preload = () => {
   boldMonoFont = loadFont('iAWriterQuattroS-Bold.ttf');
   keyboardShader = loadShader('shader.vert', 'shader.frag');
+  // pianoSampleBuffers = [
+  //   loadSound('samples/piano110.mp3'), 
+  //   loadSound('samples/piano220.mp3'), 
+  //   loadSound('samples/piano440.mp3'), 
+  //   loadSound('samples/piano880.mp3')
+  // ];
 }
 
 
@@ -250,15 +257,33 @@ window.setup = () => {
   soundconfig.delay.setType(1);
   soundconfig.delay.drywet(soundconfig.delayWet);
 
+  initSoundPerChannel();
+}
+
+// const synthType = "sampler";
+// const sampleFileFrequency = 440;
+
+function initSoundPerChannel() {
   // initialize all channels
   for (let i = 0; i < 16; i++) {
-    let synth = new p5.Oscillator();
+    let synth =  new p5.Oscillator(); // (synthType === "sampler") ? new p5.SoundFile() : new p5.Oscillator();
 
     synth.disconnect();
     synth.connect(soundconfig.filter);
-    synth.setType(soundconfig.waveform);
-    synth.freq(scale.baseFrequency)
-    synth.amp(0);
+
+    // if (synthType === "sampler") {
+    //   print(pianoSampleBuffers[2])
+    //   print(synth)
+    //   synth.setBuffer(pianoSampleBuffers[2].buffer);
+    //   synth.setVolume(0);
+    //   synth.rate(scale.baseFrequency / sampleFileFrequency);
+    // } else {
+
+      synth.setType(soundconfig.waveform);
+      synth.amp(0);
+      synth.freq(scale.baseFrequency);
+
+    // }
 
     soundsArray.push({synth, source: "off", properties: {}});
   }
