@@ -28,6 +28,7 @@ uniform vec2 u_circlePos;
 uniform float u_circleRadius;
 
 uniform bool u_spiralMode;
+uniform bool u_harmonicSeriesMode;
 
 #define PI 3.14159265358979323844
 
@@ -75,6 +76,11 @@ vec2 normCartToNormPolar(vec2 cartesian) {
 vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
     // 0,0 is the left edge of the column, base note position.
     vec2 deltaPos = kbPos - columnPos;
+
+    if (u_harmonicSeriesMode) {
+        vec2 octOffset = 1. + (deltaPos / octaveTileSize);
+        if (octOffset.x > 0. && octOffset.y > 0.) {deltaPos = log2(octOffset) * octaveTileSize;} else {return vec3(0.);}
+    }
 
     vec2 octavePos = mod(deltaPos, octaveTileSize);
     vec2 edoPos = mod(deltaPos, edoTileSize);

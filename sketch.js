@@ -38,6 +38,7 @@ const layout = {
   centsToPixels: 0.5, //0.75
   // special view mode(s)
   spiralMode: false,
+  harmonicSeriesMode: false,
   stepsVisibility: 0.9
 }
 const scale = {
@@ -305,7 +306,7 @@ function resizeCanvasAndLayout() {
     layout.baseX = Math.floor(newWidth / 2);
     layout.baseY = Math.floor(newHeight / 2);
   } else { 
-    layout.baseX = Math.floor(constrain(newWidth / 2 - 300, 0, newWidth * 0.15));
+    layout.baseX = (layout.harmonicSeriesMode) ? 0 : Math.floor(constrain(newWidth / 2 - 300, 0, newWidth * 0.15));
     layout.baseY = Math.floor(constrain(newHeight / 2, 0, newHeight)); // vertical center  
   }
 }
@@ -389,7 +390,15 @@ function updateSetting(target) {
       }
       break;
     case "xoffset":
-      layout.nextColumnOffsetCents = value;
+      if (value == 0) {
+        layout.nextColumnOffsetCents = 1200;
+        layout.harmonicSeriesMode = true;
+        resizeCanvasAndLayout();
+      } else {
+        layout.nextColumnOffsetCents = value;
+        layout.harmonicSeriesMode = false;
+        resizeCanvasAndLayout();
+      }
       break;
     case "height":
       if (value == 0) {
@@ -627,6 +636,7 @@ function drawShader() {
 
   // spiral mode
   keyboardShader.setUniform("u_spiralMode", layout.spiralMode);
+  keyboardShader.setUniform("u_harmonicSeriesMode", layout.harmonicSeriesMode);
 
   // steps in the scale / playing steps Y
   const playedCents = soundsArray.filter(
@@ -846,6 +856,7 @@ function setChannelFreqFromCoords(channel, x, y) {
 
   // get cents/ freq
   let atCents = getCentsFromScreenXY(x, y);
+  if (atCents === null) return;
 
   // add snapping, if needed
   if (scale.cents.length > 0 && scale.maxSnapToCents > 0) {
@@ -885,6 +896,7 @@ function updateScaleDegreeNumerator(scaleDeg, value) {
 
 function moveRatioNearCoords(x, y) {
   const atCents = getCentsFromScreenXY(x, y);
+  if (atCents === null) return;
   const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
   const atCentsInPeriod = wrapNumber(atCents, 0, periodCents);
 
@@ -962,6 +974,13 @@ function getCentsFromScreenXY(x, y) {
   const centsFromY = -y / layout.centsToPixels;
 
   let cents = centsFromX + centsFromY;
+
+  if (layout.harmonicSeriesMode) {
+    if (cents < -1200) return null;
+    cents = Math.log2(1 + (cents/ 1200)) * 1200 // WIP TEST
+    if (cents < -9999) return null;
+  }
+  
   return cents;
 }
 
