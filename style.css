@@ -49,8 +49,6 @@ canvas {
 
 #settingsDiv {
   display: none;
-  max-height: 90vh;
-  overflow-y: auto;
   padding: 10px;
   margin-top: 6px;
 
@@ -105,11 +103,14 @@ canvas {
   background-color: #ffffff35;
 }
 
-#settingsDiv .content > div {
+#settingsDiv .tab {
   display: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 50vh;
 }
 
-#settingsDiv .content > div.active {
+#settingsDiv .tab.active {
   display: block;
 }
 
@@ -154,8 +155,10 @@ canvas {
   #settingsDiv {
     position: absolute;
     top: 44dvh;
-    max-height: 50dvh;
     width: calc(100vw - 20px);
+  }
+  #settingsDiv .tab {
+    max-height: 50vh;
   }
   .input-field {
     width: calc(100vw - 40px);

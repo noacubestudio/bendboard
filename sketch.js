@@ -233,11 +233,16 @@ window.setup = () => {
   mainCanvas.addEventListener('pointerup',     handlePointerEvent);
   mainCanvas.addEventListener('pointercancel', handlePointerEvent);
 
+  const interfaceLayer = document.getElementById("top-container");
+  interfaceLayer.addEventListener('pointermove',   handlePointerEvent);
+  interfaceLayer.addEventListener('pointerup',     handlePointerEvent);
+  interfaceLayer.addEventListener('pointercancel', handlePointerEvent);
+
   // change focused state
   menuButton.addEventListener('mouseenter', () => {menuButtonFocused = true; window.draw();});
   menuButton.addEventListener('mouseleave', () => {menuButtonFocused = false; window.draw();});
 
-  
+
   // CONNECT AUDIO NODES
 
   soundconfig.filter = new p5.BandPass();
@@ -1215,6 +1220,7 @@ function handlePointerEvent(event) {
 
   if (event.type === "pointerdown") {
 
+    if (document.activeElement) document.activeElement.blur();
     if (checkResumingAudioContext()) return;
 
     const channel = soundsArray[firstChannel("off")];
