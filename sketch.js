@@ -1,7 +1,6 @@
 // PROPERTIES, STATE
 
 // mouse hover/ opened
-let settingsFocused = false;
 let menuButtonFocused = false;
 
 // audio
@@ -203,7 +202,6 @@ window.setup = () => {
         settingsDiv.style.display = 'block';
       } else {
         settingsDiv.style.display = 'none';
-        settingsFocused = false;
       }
     }
   });
@@ -238,10 +236,8 @@ window.setup = () => {
   // change focused state
   menuButton.addEventListener('mouseenter', () => {menuButtonFocused = true; window.draw();});
   menuButton.addEventListener('mouseleave', () => {menuButtonFocused = false; window.draw();});
-  settingsDiv.addEventListener('mouseenter', () => {settingsFocused = true;});
-  settingsDiv.addEventListener('mouseleave', () => {settingsFocused = false;});
 
-
+  
   // CONNECT AUDIO NODES
 
   soundconfig.filter = new p5.BandPass();
@@ -1296,8 +1292,7 @@ function killAllChannels() {
 
 window.keyPressed = () => {
   if (checkResumingAudioContext()) return;
-  if (settingsFocused) return;
-  if (document.activeElement.type !== undefined) return
+  if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
 
   const keyIndex = "1234567890".indexOf(key);
   if (keyIndex === -1) return;
@@ -1319,8 +1314,8 @@ window.keyReleased = () => {
     releaseChannel(channel, soundconfig.releaseDur);
     window.draw();
   }
-  if (settingsFocused) return;
-  if (document.activeElement.type !== undefined) return;
+
+  if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
   return false; // prevent any default behavior
 }
 
