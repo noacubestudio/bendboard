@@ -17,6 +17,8 @@ uniform float u_stepsGreenArray[128];
 uniform int u_stepsYarrayLength;
 
 uniform float u_stepsVisibility;
+uniform float u_edoStepVisibility;
+uniform float u_snapHeight;
 
 uniform float u_playYarray[16];
 uniform float u_playRedArray[16];
@@ -73,6 +75,14 @@ vec2 normCartToNormPolar(vec2 cartesian) {
     return vec2(radius, normAngle);
 }
 
+float easeOutCirc(float x) {
+    return sqrt(1.0 - pow(x - 1.0, 2.0));
+}
+
+float easeOutQuart(float x) {
+    return 1.0 - pow(1.0 - x, 4.0);
+}
+
 vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
     // 0,0 is the left edge of the column, base note position.
     vec2 deltaPos = kbPos - columnPos;
@@ -85,70 +95,113 @@ vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
     vec2 octavePos = mod(deltaPos, octaveTileSize);
     vec2 edoPos = mod(deltaPos, edoTileSize);
 
-    // decide color
-    vec3 lineColor = vec3(0.85, 0.8, 0.8);
-    vec3 edoLineColor = vec3(0.2, 0.3, 0.3) * u_stepsVisibility;
-
     // start with black and add
     vec3 additiveColor = vec3(0.0);
 
     // margins stay empty
     float blankMarginWidth = u_pixelHeight * 1.5;
     if (deltaPos.x < blankMarginWidth || deltaPos.x > u_columnWidth - blankMarginWidth) {
-        return additiveColor;
+        return vec3(0.1, 0.1, .1);
     }
 
     // scaled x in column
     float curvedX = curveUpDown(deltaPos.x / u_columnWidth);
 
-    additiveColor += vec3(max(1.0  - curvedX * 1.5, 0.0));
-
     // lines in column
-    // edo
-    float edoFretWeight = 0.2 / float(u_edo);
-    float nearestEdoFretY = minWrap(edoPos.y, edoTileSize.y);
-    float edoFretContour = fretMarker(0.9*curvedX, nearestEdoFretY, edoFretWeight, 0.1);
-    if (edoFretContour > 0.0) {
-        additiveColor += edoLineColor * edoFretContour;
-    }
 
-    // scale
-    float scaleFretWeight = 0.2 / float(u_stepsYarrayLength);
+    // get nearest frets to the current y and their color and distance
+    int fretIndexLower = -1; // this means the lowest color gets calculated
+    float heightLower = 0.0;
+    vec3 lowerColor = vec3(0.0);
+
+    int fretIndexHigher = u_stepsYarrayLength;
+    float heightHigher = u_octaveHeight;
+    vec3 higherColor = vec3(u_stepsRedArray[0], u_stepsGreenArray[0], u_stepsBlueArray[0]); // has to be starting color because the last 
+
     for (int i = 0; i < 128; i++) {
         if (i == u_stepsYarrayLength) break;
-        float deltaNearestY = minWrap(octavePos.y - u_stepsYarray[i], u_octaveHeight);
-        float scaleFretContour = fretMarker(curvedX, deltaNearestY, scaleFretWeight, 0.35);
-        if (scaleFretContour > 0.0) {
-            vec3 color = vec3(u_stepsRedArray[i], u_stepsGreenArray[i], u_stepsBlueArray[i]) * u_stepsVisibility;
-            additiveColor += color * scaleFretContour;
+        if (u_stepsYarray[i] < octavePos.y && i > fretIndexLower) {
+            fretIndexLower = i;
+            heightLower = u_stepsYarray[i];
+            lowerColor = vec3(u_stepsRedArray[i], u_stepsGreenArray[i], u_stepsBlueArray[i]);
+        }
+        if (u_stepsYarray[i] > octavePos.y && i < fretIndexHigher) {
+            fretIndexHigher = i;
+            heightHigher = u_stepsYarray[i];
+            higherColor = vec3(u_stepsRedArray[i], u_stepsGreenArray[i], u_stepsBlueArray[i]);
         }
     }
 
-    // highlight the first scalestep (each octave) with another layer
-    float nearestOctaveFretY = minWrap(octavePos.y, u_octaveHeight);
-    float octaveFretContour = 1.0 - smoothstep(0.0, curvedX * u_octaveHeight * 0.08, abs(nearestOctaveFretY));
-    if (octaveFretContour > 0.0) {
-        vec3 color = vec3(u_stepsRedArray[0], u_stepsGreenArray[0], u_stepsBlueArray[0]) * u_stepsVisibility;
-        additiveColor += color * octaveFretContour * 0.4;
+    float centerBetweenHeights = (heightLower + heightHigher) * 0.5;
+    float heightLowerEdge = min(centerBetweenHeights, heightLower + u_snapHeight);
+    float heightHigherEdge = max(centerBetweenHeights, heightHigher - u_snapHeight);
+
+    // from 0 to 1 to 0 along width, with semicircle height. 
+    // slightly scale towards the center so the sides stay empty
+    float pyramidX = 1. - abs((deltaPos.x / u_columnWidth) - 0.5) * 2. * 1.1;
+    float realCurvedX = easeOutCirc(pyramidX);
+
+    if (octavePos.y < heightLowerEdge) {
+        if (heightLower == 0.) lowerColor *= 2.; 
+        float range = heightLowerEdge - heightLower;
+        float upperNorm = (octavePos.y - heightLower) / range;
+        if ((1.-realCurvedX) + upperNorm < 1.) {
+            lowerColor *= min(1., (realCurvedX - upperNorm)*10.);
+            float fretSDF = upperNorm * 4. + 1.-realCurvedX;
+            if (fretSDF < 1.) { 
+                additiveColor += lowerColor * u_stepsVisibility; 
+            } else {
+                additiveColor += lowerColor * (0.1 + 0.7 / fretSDF) * u_stepsVisibility; 
+            }
+        }
+    } else if (octavePos.y > heightHigherEdge) {
+        if (heightHigher == u_octaveHeight) higherColor *= 2.; 
+        float range = heightHigher - heightHigherEdge;
+        float lowerNorm = (heightHigher - octavePos.y) / range;
+        if (- (1.-realCurvedX) + (1.-lowerNorm) > 0.) {
+            higherColor *= min(1., (realCurvedX - lowerNorm)*10.);
+            float fretSDF = lowerNorm * 4. + 1.-realCurvedX;
+            if (fretSDF < 1.) { 
+                additiveColor += higherColor * u_stepsVisibility; 
+            } else {
+                additiveColor += higherColor * (0.1 + 0.7 / fretSDF) * u_stepsVisibility; 
+            }
+        }
     }
 
-    // add a sine visual that "speeds up" along the height
-    float sineDecoFrequency = mix(2.0, 50.0, (deltaPos.y) / octaveTileSize.y); //floor(deltaPos.y) * 50.; //
-    float sineDecoAmplitude = 0.5 + 0.4 * sin(u_octaveHeight * sineDecoFrequency * 1. * deltaPos.y);
-    //float sineDecoSDF = deltaPos.x - sineDecoAmplitude;
-    float sineDecoContour = 1.0 - smoothstep(0.0, u_pixelHeight / u_columnWidth, abs(sineDecoAmplitude - (deltaPos.x / u_columnWidth)));
-    //float sineDecoContour = smoothstep(1., 0., abs(sineDecoSDF) / (abs(0.4 + cos(u_octaveHeight * sineDecoFrequency * 120. * deltaPos.y))));
-    additiveColor += edoLineColor * min(max(sineDecoContour * deltaPos.y, 0.), 0.5);
+    // edo
+    // float edoFretWeight = 0.2 / float(u_edo);
+    float nearestEdoFretY = minWrap(edoPos.y, edoTileSize.y);
+    if (realCurvedX > 0.9 && nearestEdoFretY < 0.001) {
+        additiveColor += vec3(u_edoStepVisibility);
+    }
+
+    // // add a sine visual that "speeds up" along the height
+    // float sineDecoFrequency = mix(2.0, 50.0, (deltaPos.y) / octaveTileSize.y); //floor(deltaPos.y) * 50.; //
+    // float sineDecoAmplitude = 0.5 + 0.4 * sin(u_octaveHeight * sineDecoFrequency * 1. * deltaPos.y);
+    // //float sineDecoSDF = deltaPos.x - sineDecoAmplitude;
+    // float sineDecoContour = 1.0 - smoothstep(0.0, u_pixelHeight / u_columnWidth, abs(sineDecoAmplitude - (deltaPos.x / u_columnWidth)));
+    // //float sineDecoContour = smoothstep(1., 0., abs(sineDecoSDF) / (abs(0.4 + cos(u_octaveHeight * sineDecoFrequency * 120. * deltaPos.y))));
+    // additiveColor += edoLineColor * min(max(sineDecoContour * deltaPos.y, 0.), 0.5);
 
     // playing
     for (int i = 0; i < 10; i++) {
         if (i == u_playYarrayLength) break;
         float targetY = u_playYarray[i];
-        float playingMarkerContour = fretMarker(curvedX, deltaPos.y - targetY, 0.04, 0.4);
-        if (playingMarkerContour > 0.0) {
+
+        float inRange = max(0., (1. - abs(deltaPos.y - targetY) * 20.)) * 0.3;
+        float smallRange = max(0., (1. - abs(deltaPos.y - targetY) * 110.)) * 0.9;
+        if (inRange < 1.) {
             vec3 color = vec3(u_playRedArray[i], u_playGreenArray[i], u_playBlueArray[i]);
-            additiveColor = screenBlend(additiveColor, color * playingMarkerContour);
+            additiveColor = screenBlend(additiveColor, color * inRange);
+            if (realCurvedX + smallRange > 1.0) additiveColor = screenBlend(additiveColor, color * smallRange);
         }
+
+        // float playingMarkerContour = fretMarker(curvedX, deltaPos.y - targetY, 0.04, 0.4);
+        // if (playingMarkerContour > 0.0) {
+        //     vec3 color = vec3(u_playRedArray[i], u_playGreenArray[i], u_playBlueArray[i]);
+        //     additiveColor = screenBlend(additiveColor, color * playingMarkerContour);
+        // }
     }
 
     return additiveColor;

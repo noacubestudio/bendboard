@@ -2,6 +2,7 @@
 
 // mouse hover/ opened
 let menuButtonFocused = false;
+let touchInputMode = "play" // changes so that dragging the finger/mouse can do other things - for example via keyboard toggles
 
 // audio
 let webMidiLibraryEnabled = false;
@@ -42,7 +43,7 @@ const layout = {
 }
 const scale = {
   baseFrequency: 110.0,
-  maxSnapToCents: 40,
+  maxSnapToCents: 50,
   alwaysForceSnap: false,
   equalDivisions: 12,
   periodRatio: [2, 1], // range used for scales and EDO
@@ -632,8 +633,10 @@ function drawShader() {
   
   // scale
   const periodCents = ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
-  keyboardShader.setUniform("u_octaveHeight", yTo01(layout.centsToPixels * periodCents))
+  keyboardShader.setUniform("u_octaveHeight", yTo01(layout.centsToPixels * periodCents));
   keyboardShader.setUniform("u_edo", scale.equalDivisions);
+  const minimumFretHeight = 6;
+  keyboardShader.setUniform("u_snapHeight", yTo01(Math.max(scale.maxSnapToCents * layout.centsToPixels, minimumFretHeight)));
 
   // spiral mode
   keyboardShader.setUniform("u_spiralMode", layout.spiralMode);
@@ -649,11 +652,24 @@ function drawShader() {
   const stepsRedArray = [];
   const stepsGreenArray = [];
   const stepsBlueArray = [];
-  scale.cents.forEach((cent) => {
+
+  function stepActive(index, steps) {
+    if (steps === 12 && "101011010101"[index] == "0") return false;
+    if (steps === 19 && "1001001010010010010"[index] == "0") return false;
+    return true;
+  }
+
+  scale.cents.forEach((cent, index) => {
     const percentOfOctave = cent / ratioToCents(scale.periodRatio[1], scale.periodRatio[0]);
     const hue = percentOfOctave * 360;
     const color = chroma.oklch(0.6, 0.25, hue).rgb(false);
-    const [r, g, b] = color.map(value => value/255);
+    
+    const isActive = (scale.scaleRatios.length === 0) ? stepActive(index, scale.cents.length) : true;
+
+    const [r, g, b] = color.map(value => {
+      value = value/255;
+      return (isActive) ? value : (value + .8) * 0.2;
+    });
 
     stepsYArray.push(yTo01(cent * layout.centsToPixels));
     stepsRedArray.push(r);
@@ -667,6 +683,7 @@ function drawShader() {
   keyboardShader.setUniform("u_stepsYarrayLength", stepsYArray.length);
 
   keyboardShader.setUniform("u_stepsVisibility", layout.stepsVisibility);
+  keyboardShader.setUniform("u_edoStepVisibility", (scale.scaleRatios.length === 0) ? 0.0 : 0.3);
 
   // RGB display for played cents
   const playYArray = [];
@@ -1080,7 +1097,7 @@ function initChannel(channel, type, id) {
   if (type === "pointer") channel.properties.id = id;
   channel.synth.start();
   channel.synth.amp(0);
-  channel.synth.amp(soundconfig.maxAmp, soundconfig.attackDur, 0);
+  channel.synth.amp(soundconfig.maxAmp * channel.properties.attack, soundconfig.attackDur, 0);
 }
 
 function releaseChannel(channel, releaseDuration) {
@@ -1225,8 +1242,9 @@ function handlePointerEvent(event) {
 
     const channel = soundsArray[firstChannel("off")];
     if (channel !== undefined) {
-      if (event.pointerType === "pen") moveRatioNearCoords(event.clientX, event.clientY);
+      if (event.pointerType === "pen" || touchInputMode === "move") moveRatioNearCoords(event.clientX, event.clientY);
       setChannelFreqFromCoords(channel, event.clientX, event.clientY);
+      channel.properties.attack = 1.0;
       initChannel(channel, "pointer", event.pointerId);
       window.draw();
     }
@@ -1251,7 +1269,7 @@ function handlePointerEvent(event) {
 
     const channel = soundsArray[exactChannel("pointer", event.pointerId)];
     if (channel !== undefined) {
-      if (event.pointerType === "pen") moveRatioNearCoords(event.clientX, event.clientY);
+      if (event.pointerType === "pen" || touchInputMode === "move") moveRatioNearCoords(event.clientX, event.clientY);
       setChannelFreqFromCoords(channel, event.clientX, event.clientY);
       window.draw();
     }
@@ -1301,11 +1319,15 @@ window.keyPressed = () => {
   if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
 
   const keyIndex = "1234567890".indexOf(key);
-  if (keyIndex === -1) return;
+  if (keyIndex === -1) {
+    keyChangedMode(key, true);
+    return;
+  }
 
   const channel = soundsArray[firstChannel("off")];
   if (channel !== undefined) {
     setChannelFreqFromKbd(channel, keyIndex);
+    channel.properties.attack = 1.0;
     initChannel(channel, "kbd");
     window.draw();
   }
@@ -1313,7 +1335,10 @@ window.keyPressed = () => {
 
 window.keyReleased = () => {
   const keyIndex = "1234567890".indexOf(key);
-  if (keyIndex === -1) return;
+  if (keyIndex === -1) {
+    keyChangedMode(key, false);
+    return;
+  }
 
   const channel = soundsArray[exactChannel("kbd", keyIndex)];
   if (channel !== undefined) {
@@ -1323,6 +1348,17 @@ window.keyReleased = () => {
 
   if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
   return false; // prevent any default behavior
+}
+
+function keyChangedMode(key, toggledOn) {
+  if (!toggledOn) {
+    touchInputMode = "play";
+    return;
+  } 
+
+  if (key === "m") {
+    touchInputMode = "move";
+  }
 }
 
 
@@ -1375,10 +1411,10 @@ function initNewMidiInput(deviceName) {
 
   midiInputDevice.addListener("noteon", e => {
     const whiteNoteNumberFromBase = calculateNoteNumberFromName(e.note.name, e.note.octave);
-
     const channel = soundsArray[firstChannel("off")];
     if (channel !== undefined) {
       setChannelFreqFromMidi(channel, whiteNoteNumberFromBase);
+      channel.properties.attack = e.note.attack;
       initChannel(channel, "midi");
       window.draw();
     }
