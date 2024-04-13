@@ -13,7 +13,7 @@ const soundconfig = {
   delay: undefined,
   delayWet: 0.2,
   waveform: "sawtooth",
-  maxAmp: 0.5,
+  maxAmp: 0.1,
   attackDur: 0.05, // in seconds
   releaseDur: 0.3 // in seconds
 }
@@ -113,7 +113,6 @@ window.setup = () => {
   const cnv = createCanvas(windowWidth, windowHeight, WEBGL).parent(container);
   cnv.id("mainCanvas");
   
-  noLoop();
   textFont(boldMonoFont);
   rectMode(CORNERS);
 
@@ -225,7 +224,6 @@ window.setup = () => {
     releaseAllChannels("kbd");
     updateSetting(target);
     updateURLfromSetting(target);
-    window.draw();
   });
   
   // pointer events
@@ -240,8 +238,8 @@ window.setup = () => {
   interfaceLayer.addEventListener('pointercancel', handlePointerEvent);
 
   // change focused state
-  menuButton.addEventListener('mouseenter', () => {menuButtonFocused = true; window.draw();});
-  menuButton.addEventListener('mouseleave', () => {menuButtonFocused = false; window.draw();});
+  menuButton.addEventListener('mouseenter', () => {menuButtonFocused = true;});
+  menuButton.addEventListener('mouseleave', () => {menuButtonFocused = false;});
 
 
   // CONNECT AUDIO NODES
@@ -294,7 +292,6 @@ function initSoundPerChannel() {
 
 window.windowResized = () => {
   resizeCanvasAndLayout();
-  window.draw();
 }
 
 function resizeCanvasAndLayout() {
@@ -601,8 +598,6 @@ window.draw = () => {
     text("Click or tap to resume.", width/2, height/2);
     //text(INFO, width/2, height/2 + 20);
     killAllChannels();
-  } else {
-    noLoop();
   }
 
   pop();
@@ -1246,7 +1241,6 @@ function handlePointerEvent(event) {
       setChannelFreqFromCoords(channel, event.clientX, event.clientY);
       channel.properties.attack = 1.0;
       initChannel(channel, "pointer", event.pointerId);
-      window.draw();
     }
 
   } else if (event.type === "pointerup") {
@@ -1254,7 +1248,6 @@ function handlePointerEvent(event) {
     const channel = soundsArray[exactChannel("pointer", event.pointerId)];
     if (channel !== undefined) {
       releaseChannel(channel, soundconfig.releaseDur);
-      window.draw();
     }
 
   } else if (event.type === "pointercancel") {
@@ -1271,7 +1264,6 @@ function handlePointerEvent(event) {
     if (channel !== undefined) {
       if (event.pointerType === "pen" || touchInputMode === "move") moveRatioNearCoords(event.clientX, event.clientY);
       setChannelFreqFromCoords(channel, event.clientX, event.clientY);
-      window.draw();
     }
   }
 }
@@ -1283,7 +1275,6 @@ function checkResumingAudioContext() {
     killAllChannels();
     userStartAudio().then(
       print("User audio should now be started! (check: "+ getAudioContext().state+")"),
-      loop()
     );
     return true;
   }
@@ -1329,7 +1320,6 @@ window.keyPressed = () => {
     setChannelFreqFromKbd(channel, keyIndex);
     channel.properties.attack = 1.0;
     initChannel(channel, "kbd");
-    window.draw();
   }
 }
 
@@ -1343,7 +1333,6 @@ window.keyReleased = () => {
   const channel = soundsArray[exactChannel("kbd", keyIndex)];
   if (channel !== undefined) {
     releaseChannel(channel, soundconfig.releaseDur);
-    window.draw();
   }
 
   if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
@@ -1416,7 +1405,6 @@ function initNewMidiInput(deviceName) {
       setChannelFreqFromMidi(channel, whiteNoteNumberFromBase);
       channel.properties.attack = e.note.attack;
       initChannel(channel, "midi");
-      window.draw();
     }
   });
 
@@ -1438,8 +1426,6 @@ function initNewMidiInput(deviceName) {
     // if note played via keyboard or midi, update channel
     //const changedStepChannel = cha
     // WIP: CHANGE PLAYING NOTES TO MATCH?
-    
-    window.draw();
   });
 
   midiInputDevice.addListener("noteoff", e => {
@@ -1450,7 +1436,6 @@ function initNewMidiInput(deviceName) {
       channel.source = "off";
       channel.properties = {};
       channel.synth.stop();
-      window.draw();
     }
     return false; // prevent any default behavior
   });

@@ -5,10 +5,8 @@ html, body {
   font-family: 'Roboto', sans-serif;
   font-size: 15px;
 }
-body {
-  position:absolute;
-}
-canvas {
+
+canvas, canvas * {
   display: block;
   touch-action: none;
   -webkit-touch-callout: none;
@@ -17,8 +15,11 @@ canvas {
   -ms-user-select: none;
   user-select: none;
 }
+
 #top-container {
   position: absolute;
+  top: 0px;
+  left: 0px;
   display: flex;
   align-items: flex-start;
   margin: 0px;
@@ -138,14 +139,6 @@ canvas {
   padding: 10px 10px;
   font-size: 16px;
   border-radius: 6px;
-}
-
-#bottom-container {
-  position: absolute;
-  top: 0px;
-}
-#bottom-container * {
-  position: relative;
 }
 
 @media (orientation: portrait) and (max-width: 767px) {

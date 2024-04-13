@@ -1,3 +1,5 @@
+#extension GL_EXT_shader_non_constant_global_initializers : enable
+
 precision highp float;
 
 uniform vec2 u_resolution;
@@ -79,9 +81,9 @@ float easeOutCirc(float x) {
     return sqrt(1.0 - pow(x - 1.0, 2.0));
 }
 
-float easeOutQuart(float x) {
-    return 1.0 - pow(1.0 - x, 4.0);
-}
+// float easeOutQuart(float x) {
+//     return 1.0 - pow(1.0 - x, 4.0);
+// }
 
 vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
     // 0,0 is the left edge of the column, base note position.
@@ -104,8 +106,10 @@ vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
         return vec3(0.1, 0.1, .1);
     }
 
-    // scaled x in column
-    float curvedX = curveUpDown(deltaPos.x / u_columnWidth);
+    // from 0 to 1 to 0 along width, with semicircle height. 
+    // slightly scale towards the center so the sides stay empty
+    float columnCenterDistX = 1. - abs((deltaPos.x / u_columnWidth) - 0.5) * 2. * 1.1;
+    float columnCenterDistCircX = easeOutCirc(columnCenterDistX);
 
     // lines in column
 
@@ -136,18 +140,13 @@ vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
     float heightLowerEdge = min(centerBetweenHeights, heightLower + u_snapHeight);
     float heightHigherEdge = max(centerBetweenHeights, heightHigher - u_snapHeight);
 
-    // from 0 to 1 to 0 along width, with semicircle height. 
-    // slightly scale towards the center so the sides stay empty
-    float pyramidX = 1. - abs((deltaPos.x / u_columnWidth) - 0.5) * 2. * 1.1;
-    float realCurvedX = easeOutCirc(pyramidX);
-
     if (octavePos.y < heightLowerEdge) {
         if (heightLower == 0.) lowerColor *= 2.; 
         float range = heightLowerEdge - heightLower;
         float upperNorm = (octavePos.y - heightLower) / range;
-        if ((1.-realCurvedX) + upperNorm < 1.) {
-            lowerColor *= min(1., (realCurvedX - upperNorm)*10.);
-            float fretSDF = upperNorm * 4. + 1.-realCurvedX;
+        if ((1.-columnCenterDistCircX) + upperNorm < 1.) {
+            lowerColor *= min(1., (columnCenterDistCircX - upperNorm)*10.);
+            float fretSDF = upperNorm * 4. + 1.-columnCenterDistCircX;
             if (fretSDF < 1.) { 
                 additiveColor += lowerColor * u_stepsVisibility; 
             } else {
@@ -158,9 +157,9 @@ vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
         if (heightHigher == u_octaveHeight) higherColor *= 2.; 
         float range = heightHigher - heightHigherEdge;
         float lowerNorm = (heightHigher - octavePos.y) / range;
-        if (- (1.-realCurvedX) + (1.-lowerNorm) > 0.) {
-            higherColor *= min(1., (realCurvedX - lowerNorm)*10.);
-            float fretSDF = lowerNorm * 4. + 1.-realCurvedX;
+        if (- (1.-columnCenterDistCircX) + (1.-lowerNorm) > 0.) {
+            higherColor *= min(1., (columnCenterDistCircX - lowerNorm)*10.);
+            float fretSDF = lowerNorm * 4. + 1.-columnCenterDistCircX;
             if (fretSDF < 1.) { 
                 additiveColor += higherColor * u_stepsVisibility; 
             } else {
@@ -172,17 +171,9 @@ vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
     // edo
     // float edoFretWeight = 0.2 / float(u_edo);
     float nearestEdoFretY = minWrap(edoPos.y, edoTileSize.y);
-    if (realCurvedX > 0.9 && nearestEdoFretY < 0.001) {
+    if (columnCenterDistCircX > 0.9 && nearestEdoFretY < 0.001) {
         additiveColor += vec3(u_edoStepVisibility);
     }
-
-    // // add a sine visual that "speeds up" along the height
-    // float sineDecoFrequency = mix(2.0, 50.0, (deltaPos.y) / octaveTileSize.y); //floor(deltaPos.y) * 50.; //
-    // float sineDecoAmplitude = 0.5 + 0.4 * sin(u_octaveHeight * sineDecoFrequency * 1. * deltaPos.y);
-    // //float sineDecoSDF = deltaPos.x - sineDecoAmplitude;
-    // float sineDecoContour = 1.0 - smoothstep(0.0, u_pixelHeight / u_columnWidth, abs(sineDecoAmplitude - (deltaPos.x / u_columnWidth)));
-    // //float sineDecoContour = smoothstep(1., 0., abs(sineDecoSDF) / (abs(0.4 + cos(u_octaveHeight * sineDecoFrequency * 120. * deltaPos.y))));
-    // additiveColor += edoLineColor * min(max(sineDecoContour * deltaPos.y, 0.), 0.5);
 
     // playing
     for (int i = 0; i < 10; i++) {
@@ -194,14 +185,8 @@ vec3 keyboardColumnColor(vec2 kbPos, vec2 columnPos) {
         if (inRange < 1.) {
             vec3 color = vec3(u_playRedArray[i], u_playGreenArray[i], u_playBlueArray[i]);
             additiveColor = screenBlend(additiveColor, color * inRange);
-            if (realCurvedX + smallRange > 1.0) additiveColor = screenBlend(additiveColor, color * smallRange);
+            if (columnCenterDistCircX + smallRange > 1.0) additiveColor = screenBlend(additiveColor, color * smallRange);
         }
-
-        // float playingMarkerContour = fretMarker(curvedX, deltaPos.y - targetY, 0.04, 0.4);
-        // if (playingMarkerContour > 0.0) {
-        //     vec3 color = vec3(u_playRedArray[i], u_playGreenArray[i], u_playBlueArray[i]);
-        //     additiveColor = screenBlend(additiveColor, color * playingMarkerContour);
-        // }
     }
 
     return additiveColor;
@@ -230,15 +215,18 @@ vec3 circleColor(vec2 polarCoords) {
     vec3 edoLineColor = vec3(0.2, 0.3, 0.3);
 
     polarCoords.y *= u_octaveHeight;
-    // scaled x in column
-    float curvedX = curveUpDown(polarCoords.x * 0.9);
+
+    // from 0 to 1 to 0 along width, with semicircle height. 
+    // slightly scale towards the center so the sides stay empty
+    float columnCenterDistX = 1. - abs((polarCoords.x) - 0.5) * 2. * 1.1;
+    float columnCenterDistCircX = easeOutCirc(columnCenterDistX);
 
     float edoY = mod(polarCoords.y, edoTileSize.y);
 
     // lines in column
     float edoFretWeight = 0.2 / float(u_edo);
     float nearestEdoFretY = minWrap(edoY, edoTileSize.y);
-    float edoFretContour = fretMarker(curvedX, nearestEdoFretY, edoFretWeight, 0.35);
+    float edoFretContour = fretMarker(columnCenterDistCircX, nearestEdoFretY, edoFretWeight, 0.35);
     if (edoFretContour > 0.0) {
         additiveColor += edoLineColor * edoFretContour;
     }
@@ -248,7 +236,7 @@ vec3 circleColor(vec2 polarCoords) {
     for (int i = 0; i < 128; i++) {
         if (i == u_stepsYarrayLength) break;
         float deltaNearestY = minWrap(polarCoords.y - u_stepsYarray[i], u_octaveHeight);
-        float scaleFretContour = fretMarker(curvedX, deltaNearestY, scaleFretWeight, 0.35);
+        float scaleFretContour = fretMarker(columnCenterDistCircX, deltaNearestY, scaleFretWeight, 0.35);
         if (scaleFretContour > 0.0) {
             vec3 color = vec3(u_stepsRedArray[i], u_stepsGreenArray[i], u_stepsBlueArray[i]);
             additiveColor += color * scaleFretContour;
@@ -261,15 +249,13 @@ vec3 circleColor(vec2 polarCoords) {
         float inOctavePlayFret = mod(u_playYarray[i], u_octaveHeight);
         float nearestPlayingY = minWrap(polarCoords.y - inOctavePlayFret, u_octaveHeight);
         //float nearestPlayingAngle = nearestPlayingY / u_octaveHeight;
-        float playingMarkerContour = fretMarker(curvedX, nearestPlayingY, 0.04, 0.35);
+        float playingMarkerContour = fretMarker(columnCenterDistCircX, nearestPlayingY, 0.04, 0.35);
         if (playingMarkerContour > 0.0) {
             additiveColor = screenBlend(additiveColor, lineColor * playingMarkerContour);
         }
     }
 
     return additiveColor;
-
-    //return vec3(polarCoords.y);
 }
 
 void main() {
