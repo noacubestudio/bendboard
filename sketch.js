@@ -13,7 +13,7 @@ const soundconfig = {
   delay: undefined,
   delayWet: 0.2,
   waveform: "sawtooth",
-  maxAmp: 0.1,
+  maxAmp: 0.2,
   attackDur: 0.05, // in seconds
   releaseDur: 0.3 // in seconds
 }
@@ -86,7 +86,7 @@ const initialSettings = [
   { tabId: 'tab1', name: 'scale', label: 'Scale Chord (ratios)', initialValue: scale.scaleRatios.join(":"), type: 'text', placeholder: '12:17:24, 4:5:6:7, all' },
   { tabId: 'tab1', name: 'mode', label: 'Scale Mode (starting step)', initialValue: scale.mode, type: 'number', placeholder: '0, 1 ... last step of scale' },
 
-  { tabId: 'tab2', name: 'snaprange', label: 'Snap touches to scale (range in cents)', initialValue: scale.maxSnapToCents, type: 'number', placeholder: '0, 30, 50', step: '5' },
+  { tabId: 'tab2', name: 'snaprange', label: 'Snap touches to scale (range in cents)', initialValue: scale.maxSnapToCents, type: 'number', placeholder: '0, 30, 50, -1', step: '5' },
   { tabId: 'tab2', name: 'xoffset', label: 'Repeat Position (offset in cents)', initialValue: layout.nextColumnOffsetCents, type: 'number', placeholder: '200 (a tone)' },
   { tabId: 'tab2', name: 'height', label: 'Resolution (px per cent, 0 to wrap)', initialValue: layout.centsToPixels, type: 'number', placeholder: '0.5, 0.75, 0 (circular)', step: '0.05' },
   { tabId: 'tab2', name: 'columnpx', label: 'Column width (px)', initialValue: layout.columnWidth, type: 'number', placeholder: '50' },
@@ -414,7 +414,13 @@ function updateSetting(target) {
       if (value > 10 && value < width) layout.columnWidth = value;
       break;
     case "snaprange":
-      if (value >= 0) scale.maxSnapToCents = value;
+      if (value >= 0) {
+        scale.maxSnapToCents = value;
+        scale.alwaysForceSnap = false;
+      } else {
+        scale.maxSnapToCents = Infinity;
+        scale.alwaysForceSnap = true;
+      }
       break;
     case "waveform":
       if (["sine", "square", "triangle","sawtooth"].includes(value)) {
@@ -631,7 +637,8 @@ function drawShader() {
   keyboardShader.setUniform("u_octaveHeight", yTo01(layout.centsToPixels * periodCents));
   keyboardShader.setUniform("u_edo", scale.equalDivisions);
   const minimumFretHeight = 6;
-  keyboardShader.setUniform("u_snapHeight", yTo01(Math.max(scale.maxSnapToCents * layout.centsToPixels, minimumFretHeight)));
+  const maximumFretHeight = (scale.alwaysForceSnap) ? Infinity : scale.maxSnapToCents * layout.centsToPixels;
+  keyboardShader.setUniform("u_snapHeight", yTo01(Math.max(maximumFretHeight, minimumFretHeight)));
 
   // spiral mode
   keyboardShader.setUniform("u_spiralMode", layout.spiralMode);
@@ -876,7 +883,7 @@ function setChannelFreqFromCoords(channel, x, y) {
     // try finding a snapping target and strength and update cents based on those
     updateSnappingForChannel(channel, atCents);
     if (channel.properties.snapTargetCents !== undefined) {
-      atCents = lerp(atCents, channel.properties.snapTargetCents, channel.properties.snapStrength/100);
+      atCents = lerp(atCents, channel.properties.snapTargetCents, channel.properties.snapStrength);
     }
   }
 
@@ -1002,57 +1009,61 @@ function updateSnappingForChannel(channel, cents) {
   const completelySnappedCents = getCompletelySnappedCents(cents);
   
   if (scale.alwaysForceSnap) {
+
     channel.properties.snapTargetCents = completelySnappedCents;
-    channel.properties.snapStrength = 100;
+    channel.properties.snapStrength = 1;
     return;
-  }
 
-  const lastCents = channel.properties.lastCents;
-  if (lastCents === undefined || Math.abs(lastCents-cents) > scale.maxSnapToCents) {
-    // jumped to value outside of snap range
-    // start snap to something in range
-    if (completelySnappedCents !== undefined) {
-      channel.properties.snapTargetCents = completelySnappedCents;
-      channel.properties.snapStartCents = cents;
-      channel.properties.snapStrength = 100;
-    } else {
-      channel.properties.snapTargetCents = undefined;
-      channel.properties.snapStartCents = undefined;
-      channel.properties.snapStrength = 0;
-    }
   } else {
-    // this might later include switch to a new target instead
 
-    // smoothly moving and something to snap to
-    if (channel.properties.snapStartCents !== undefined && completelySnappedCents !== undefined) {
-      // distance from start to now compared to target
-      if (channel.properties.snapTargetCents !== undefined) {
-        const targetEndDistance = scale.maxSnapToCents;
-        const targetCurrentDistance = Math.abs(channel.properties.snapTargetCents - cents);
-        const targetStartDistance = Math.abs(channel.properties.snapTargetCents - channel.properties.snapStartCents);
-        channel.properties.snapStrength = map(targetCurrentDistance, targetStartDistance, targetEndDistance, 100, 0);
+    const lastCents = channel.properties.lastCents;
+    if (lastCents === undefined || Math.abs(lastCents-cents) > scale.maxSnapToCents) {
+      // jumped to value outside of snap range
+      // start snap to something in range
+      if (completelySnappedCents !== undefined) {
+        channel.properties.snapTargetCents = completelySnappedCents;
+        channel.properties.snapStartCents = cents;
+        channel.properties.snapStrength = 1;
       } else {
-        channel.properties.snapStartCents = undefined;
-        channel.properties.snapStrength = 0;
-      }
-      if (channel.properties.snapStrength <= 0) {
         channel.properties.snapTargetCents = undefined;
         channel.properties.snapStartCents = undefined;
         channel.properties.snapStrength = 0;
-      } else if (channel.properties.snapStrength >= 100) {
-        channel.properties.snapStrength = 100;
       }
     } else {
-      // moved out of range
-      channel.properties.snapTargetCents = undefined;
-      channel.properties.snapStrength = 0;
-      
+      // this might later include switch to a new target instead
+
+      // smoothly moving and something to snap to
+      if (channel.properties.snapStartCents !== undefined && completelySnappedCents !== undefined) {
+        // distance from start to now compared to target
+        if (channel.properties.snapTargetCents !== undefined) {
+          const targetEndDistance = scale.maxSnapToCents;
+          const targetCurrentDistance = Math.abs(channel.properties.snapTargetCents - cents);
+          const targetStartDistance = Math.abs(channel.properties.snapTargetCents - channel.properties.snapStartCents);
+          channel.properties.snapStrength = map(targetCurrentDistance, targetStartDistance, targetEndDistance, 1, 0);
+        } else {
+          channel.properties.snapStartCents = undefined;
+          channel.properties.snapStrength = 0;
+        }
+        if (channel.properties.snapStrength <= 0) {
+          channel.properties.snapTargetCents = undefined;
+          channel.properties.snapStartCents = undefined;
+          channel.properties.snapStrength = 0;
+        } else if (channel.properties.snapStrength >= 1) {
+          channel.properties.snapStrength = 1;
+        }
+      } else {
+        // moved out of range
+        channel.properties.snapTargetCents = undefined;
+        channel.properties.snapStrength = 0;
+        
+      }
     }
-  }
-  // hit target
-  if (Math.abs(cents - completelySnappedCents) < 1) {
-    channel.properties.snapTargetCents = undefined;
-    channel.properties.snapStrength = undefined;
+    // hit target
+    if (Math.abs(cents - completelySnappedCents) < 1) {
+      channel.properties.snapTargetCents = undefined;
+      channel.properties.snapStrength = undefined;
+    }
+
   }
 }
 
@@ -1065,7 +1076,11 @@ function getCompletelySnappedCents(c) {
   let lastPitch = null;
   let snapToCentsInOctave = null;
   for (let i = 0; i < scaleOctaveCents.length; i++) {
-    const currentPitch = scaleOctaveCents[i]
+    const currentPitch = scaleOctaveCents[i];
+    if (currentPitch === playedInOctaveCents) {
+      snapToCentsInOctave = currentPitch;
+      break;
+    }
     if (i > 0 && playedInOctaveCents > lastPitch && playedInOctaveCents < currentPitch) {
       // find which one is closer and break
       if (abs(playedInOctaveCents - lastPitch) < abs(playedInOctaveCents - currentPitch)) {
